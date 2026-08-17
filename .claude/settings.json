@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "devteam@devteam-local": true
+  },
+  "extraKnownMarketplaces": {
+    "devteam-local": {
+      "source": {
+        "source": "directory",
+        "path": "C:\\Users\\Folga\\devteam-plugin-en"
+      }
+    }
+  }
+}
