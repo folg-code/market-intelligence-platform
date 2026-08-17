@@ -14,8 +14,11 @@ pip install -e ".[dev]"
 python -m moj_projekt.main
 ```
 
-## Testy
+## Checks
+
+One command runs lint, type-check, and tests (S001-T002). See
+`docs/reference/WORKFLOWS.md` for the full setup/run guide once it exists.
 
 ```bash
-pytest
+python scripts/check.py
 ```
