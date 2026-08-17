@@ -93,7 +93,7 @@ board.
 | Task | Outcome | Depends on | Status |
 |---|---|---|---|
 | S001-T001 | Wave 0 decisions reviewed and approved by a human | - | TODO |
-| S001-T002 | Toolchain and dependency baseline; one command runs lint + types + tests | T001 | TODO |
+| S001-T002 | Toolchain and dependency baseline; one command runs lint + types + tests | T001 | In Review |
 | S001-T003 | Docker Compose stack (`app` + Postgres/pgvector) with typed settings and a `/health` endpoint | T002 | TODO |
 | S001-T004 | Alembic baseline; `vector` extension enabled by migration | T003 | TODO |
 | S001-T005 | Pure domain value objects and enums, unit-tested without a database | T002 | TODO |
