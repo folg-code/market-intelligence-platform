@@ -56,3 +56,11 @@ def test_seed_sources_have_pairwise_distinct_publishers() -> None:
 def test_seed_sources_are_active_by_default() -> None:
     for source in SEED_SOURCES:
         assert source.active is True
+
+
+def test_bloomberg_seed_uses_the_public_markets_rss_url() -> None:
+    bloomberg = next(source for source in SEED_SOURCES if source.key == "bloomberg_markets")
+    assert bloomberg.source_type == "rss"
+    assert bloomberg.endpoint_config["feed_url"] == (
+        "https://feeds.bloomberg.com/markets/news.rss"
+    )

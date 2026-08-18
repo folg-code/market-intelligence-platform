@@ -43,13 +43,16 @@ def run_cycle(
     Stages run in order and stop at the first one that raises: later
     stages consume earlier stages' output (ingest -> extract -> narratives
     -> evidence -> state -> alerts), so continuing past a failure would
-    mean operating on incomplete input. The raising stage's exception is
-    caught and recorded as its own
+    mean operating on incomplete input. Each stage receives the
+    in-progress CycleRun and returns it (ingest records per-source
+    outcomes this way). The raising stage's exception is caught and
+    recorded as its own
     :class:`~moj_projekt.domain.cycle_run.StageOutcome` - it does not
     propagate out of this function - and the cycle still reaches exactly
     one terminal state: ``SUCCEEDED`` if every stage ran and succeeded,
     ``FAILED`` otherwise, with ``failure_reason`` naming which stage failed
-    and why.
+    and why. Per-source ingest failures do not raise; they stay on
+    ``source_outcomes`` and the cycle still ``SUCCEEDED``.
     """
     if repository.get_running() is not None:
         return None
@@ -60,7 +63,7 @@ def run_cycle(
     failure_detail: str | None = None
     for stage in stages:
         try:
-            stage.run()
+            cycle_run = stage.run(cycle_run)
         except Exception as exc:  # a stage's own error must not crash the cycle
             failure_detail = f"{type(exc).__name__}: {exc}"
             cycle_run = cycle_run.with_stage_outcome(

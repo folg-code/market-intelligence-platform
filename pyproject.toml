@@ -54,10 +54,14 @@ strict = true
 files = ["src"]
 plugins = ["pydantic.mypy"]
 
-# APScheduler 3.x ships no py.typed marker / stubs (S001-T011); this is
-# scoped to that one package, not a blanket relaxation of strict mode.
+# APScheduler 3.x and feedparser ship no py.typed marker / stubs; these
+# are scoped to those packages, not a blanket relaxation of strict mode.
 [[tool.mypy.overrides]]
 module = "apscheduler.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "feedparser"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -65,5 +69,5 @@ testpaths = ["tests"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: requires a live PostgreSQL/pgvector database (see compose.yaml)",
-    "network: requires live network access to an external source (S001-T013; no test uses this marker yet - it is a mechanism reserved for S001-T012's source adapter)",
+    "network: requires live network access to an external source (S001-T012 live RSS feed; excluded from default pytest and from CI)",
 ]

@@ -10,6 +10,7 @@ live in :mod:`moj_projekt.persistence`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
@@ -55,6 +56,10 @@ class SourceRepository(Protocol):
         ...
 
     def get(self, key: str) -> Source | None: ...
+
+    def list_active(self) -> Sequence[Source]:
+        """Return every Source currently marked active, ordered by key."""
+        ...
 
 
 class DocumentRepository(Protocol):

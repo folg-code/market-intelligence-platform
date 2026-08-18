@@ -90,6 +90,28 @@ def test_with_stage_outcome_rejects_a_terminal_cycle_run() -> None:
         cycle_run.with_stage_outcome("ingest", StageOutcome(succeeded=True))
 
 
+def test_with_source_outcome_accumulates_without_mutating_the_original() -> None:
+    cycle_run = CycleRun(started_at=_STARTED_AT)
+
+    updated = cycle_run.with_source_outcome(
+        "bloomberg_markets", StageOutcome(succeeded=True)
+    )
+
+    assert cycle_run.source_outcomes == {}
+    assert updated.source_outcomes == {
+        "bloomberg_markets": StageOutcome(succeeded=True)
+    }
+
+
+def test_with_source_outcome_rejects_a_terminal_cycle_run() -> None:
+    cycle_run = CycleRun(started_at=_STARTED_AT).finish(
+        status=CycleRunStatus.SUCCEEDED, ended_at=_STARTED_AT + timedelta(minutes=1)
+    )
+
+    with pytest.raises(ValueError, match="terminal"):
+        cycle_run.with_source_outcome("bloomberg_markets", StageOutcome(succeeded=True))
+
+
 def test_finish_requires_a_terminal_status() -> None:
     cycle_run = CycleRun(started_at=_STARTED_AT)
 

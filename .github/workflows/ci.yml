@@ -98,5 +98,8 @@ jobs:
 
       # Overrides the default `addopts = "-m 'not integration'"` from
       # pyproject.toml so the full suite - unit and integration - runs here.
+      # Network-marked tests (the live RSS feed) stay excluded: they need
+      # outbound HTTP to a third-party host and are not required for CI
+      # to pass (S001-T012 / S001-T013).
       - name: Run tests (unit + integration)
-        run: pytest -o addopts=""
+        run: pytest -o addopts="" -m "not network"
