@@ -98,7 +98,7 @@ board.
 | S001-T004 | Alembic baseline; `vector` extension enabled by migration | T003 | Done |
 | S001-T005 | Pure domain value objects and enums, unit-tested without a database | T002 | Done |
 | S001-T006 | Source + Document persisted, with immutability and dedupe enforced | T004, T005 | Done |
-| S001-T007 | Event + EvidencePack persisted, facts/claims kept separate | T006 | TODO |
+| S001-T007 | Event + EvidencePack persisted, facts/claims kept separate | T006 | Done |
 | S001-T008 | Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation persisted, incl. the identity embedding column | T007 | TODO |
 | S001-T009 | NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry persisted (append-only where required) | T008 | TODO |
 | S001-T010 | MVP Source registry seeded idempotently with tiers and publisher metadata | T006 | TODO |
@@ -246,9 +246,14 @@ board.
 - **Scope:** models and migration for Narrative (including `identity_embedding`
   as a `vector` column plus `embedding_model` and `embedding_version`),
   NarrativeEpisode, NarrativeEvent (assignment, with shortlist reference and
-  LLMRun reference fields), NarrativeRelation.
+  LLMRun reference fields), NarrativeRelation. Also adds the foreign key from
+  `evidence_packs.narrative_id` to `narratives.id` (T007 created the column
+  and its unique-with-`evidence_version` constraint before the `narratives`
+  table existed, so the FK could not be added then - reviewer note on
+  S001-T007, carried forward here so it is not dropped).
 - **Acceptance:**
   - `canonical_key` is unique;
+  - `evidence_packs.narrative_id` has a foreign key to `narratives.id`;
   - a Narrative without an `economic_mechanism` or `market_interpretation` is
     rejected;
   - a Narrative with a NULL `identity_embedding` is fully valid (the embedding is
