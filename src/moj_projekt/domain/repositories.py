@@ -15,6 +15,7 @@ from uuid import UUID
 
 from moj_projekt.domain.alert import Alert
 from moj_projekt.domain.audit_entry import AuditEntry
+from moj_projekt.domain.cycle_run import CycleRun
 from moj_projekt.domain.document import Document, ProcessingStatus
 from moj_projekt.domain.enums import Instrument
 from moj_projekt.domain.event import Event
@@ -30,6 +31,7 @@ from moj_projekt.domain.source import Source
 __all__ = [
     "AlertRepository",
     "AuditEntryRepository",
+    "CycleRunRepository",
     "DocumentRepository",
     "EventRepository",
     "EvidencePackRepository",
@@ -253,3 +255,41 @@ class AuditEntryRepository(Protocol):
     def add(self, entry: AuditEntry) -> AuditEntry: ...
 
     def get(self, entry_id: UUID) -> AuditEntry | None: ...
+
+
+class CycleRunRepository(Protocol):
+    """Persists and retrieves :class:`CycleRun` rows (ADR-0004, ADR-0011).
+
+    Unlike the append-only or immutable-after-insert repositories above, a
+    CycleRun is written twice: once as ``RUNNING`` when the cycle starts
+    (:meth:`add`), then once more with its terminal state
+    (:meth:`update`) - there is no in-between write, so no "advance one
+    field" method is needed the way
+    :meth:`DocumentRepository.advance_processing_status` is.
+    """
+
+    def add(self, cycle_run: CycleRun) -> CycleRun:
+        """Persist a new ``RUNNING`` CycleRun and return the stored row,
+        with its assigned ``id``.
+        """
+        ...
+
+    def update(self, cycle_run: CycleRun) -> CycleRun:
+        """Persist the current state of an existing CycleRun (matched by
+        ``cycle_run.id``) - status, ``ended_at``, stage/source outcomes,
+        and ``failure_reason``. Raises if no row with that id exists.
+        """
+        ...
+
+    def get(self, cycle_run_id: UUID) -> CycleRun | None: ...
+
+    def get_running(self) -> CycleRun | None:
+        """Return the currently ``RUNNING`` CycleRun, if any.
+
+        This is the data-level overlap guard (ADR-0011: "the cycle's
+        idempotency is not allowed to depend on the scheduler behaving
+        correctly") - the orchestration function checks this before
+        starting a new run, independent of the scheduler's own
+        ``max_instances=1``.
+        """
+        ...

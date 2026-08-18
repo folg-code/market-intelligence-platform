@@ -54,6 +54,12 @@ strict = true
 files = ["src"]
 plugins = ["pydantic.mypy"]
 
+# APScheduler 3.x ships no py.typed marker / stubs (S001-T011); this is
+# scoped to that one package, not a blanket relaxation of strict mode.
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not integration'"

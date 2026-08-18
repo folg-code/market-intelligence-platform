@@ -34,6 +34,7 @@ __all__ = [
     "AlertModel",
     "AuditEntryModel",
     "Base",
+    "CycleRunModel",
     "DocumentModel",
     "EventModel",
     "EvidencePackModel",
@@ -408,6 +409,39 @@ class AuditEntryModel(Base):
         DateTime(timezone=True), nullable=False
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class CycleRunModel(Base):
+    """Row for a :class:`~moj_projekt.domain.cycle_run.CycleRun` (S001-T011).
+
+    ``status`` is stored as the underlying ``CycleRunStatus`` ordinal
+    (``SmallInteger``), mirroring how ``Document.processing_status`` stores
+    its IntEnum. ``stage_outcomes``/``source_outcomes`` are separate JSONB
+    columns, each keyed by stage/source name, consistent with how other
+    JSONB map/list columns are modelled elsewhere in this file. A partial
+    unique index from the migration (not expressible here) enforces "at
+    most one RUNNING row" at the database level too, mirroring
+    ``narrative_episodes``'s EXCLUDE-constraint pattern of backing a
+    cross-row domain invariant with a DB constraint.
+    """
+
+    __tablename__ = "cycle_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    stage_outcomes: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    source_outcomes: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class NarrativeInstrumentImpactModel(Base):
