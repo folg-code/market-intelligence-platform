@@ -11,6 +11,7 @@ same command is used locally and in CI (S001-T002).
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 
