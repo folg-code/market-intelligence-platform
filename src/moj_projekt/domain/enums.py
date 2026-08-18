@@ -22,6 +22,7 @@ __all__ = [
     "RelationType",
     "Instrument",
     "EvidenceRefKind",
+    "AlertType",
 ]
 
 
@@ -138,3 +139,18 @@ class EvidenceRefKind(StrEnum):
     DOCUMENT = "document"
     EVENT = "event"
     FACT = "fact"
+
+
+class AlertType(StrEnum):
+    """Initial Alert types (DOMAIN_MODEL.md section 3, "Delivery").
+
+    ``UNCONFIRMED_SOCIAL_HYPE`` is modelled but inert until social sources
+    exist.
+    """
+
+    EMERGING_NARRATIVE = "emerging_narrative"
+    CONFIRMED_NARRATIVE = "confirmed_narrative"
+    NARRATIVE_ACCELERATION = "narrative_acceleration"
+    HIGH_IMPACT_EVENT_ADDED_TO_NARRATIVE = "high_impact_event_added_to_narrative"
+    CONFLICTING_INFORMATION = "conflicting_information"
+    UNCONFIRMED_SOCIAL_HYPE = "unconfirmed_social_hype"
