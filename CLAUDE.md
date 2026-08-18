@@ -47,6 +47,28 @@ Only what sets this project apart - not general Python/FastAPI knowledge.
 - **A failing source must not fail the cycle.** Ingestion errors are isolated
   per source and recorded in the CycleRun record.
 
+## Per-task delivery loop
+
+Every Sprint 001+ task follows this loop, in this order, with no step skipped:
+
+```text
+engineer (one task, one PR, task branch off the sprint branch)
+  -> tester    (independent verification against acceptance criteria - re-run
+                claims live, don't trust the engineer's self-report)
+  -> reviewer  (quality/process/ADR compliance - Approve or Request Changes;
+                on Request Changes, back to engineer on the same branch, then
+                re-verify with tester + reviewer before proceeding)
+  -> tech-writer (sync README / reference docs / CURRENT_STATUS / the sprint
+                  task table to what was actually merged - not deferred to
+                  sprint close)
+  -> human approval, then merge into the sprint branch
+```
+
+`tech-writer` runs after every merged task, not only at sprint close - this
+was skipped for S001-T002..T006 in one session and had to be caught up in a
+single retroactive pass; don't repeat that. Sprint close still gets its own
+larger documentation/retro pass on top of this per-task sync.
+
 ## More
 
 Full documentation: [docs/README.md](docs/README.md)
