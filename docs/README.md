@@ -19,6 +19,6 @@ Also at the repo root: `CLAUDE.md` - project-specific coding conventions, loaded
 automatically in every session.
 
 Approval state: everything under `vision/`, all ADRs, `ROADMAP.md`, and
-`sprints/SPRINT_001.md` are currently `Proposed`/`Planned` and require human
-approval before implementation may rely on them (see the `governance` skill).
-Documents under `reference/` are descriptive and need no approval.
+`sprints/SPRINT_001.md` were approved by the user in-conversation on
+2026-08-17 (see `planning/CURRENT_STATUS.md` section 6). Documents under
+`reference/` are descriptive and need no approval.

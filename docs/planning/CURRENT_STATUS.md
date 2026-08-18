@@ -8,15 +8,17 @@ task status lives in the sprint table (and in an Issues tracker once one exists)
 ## 2. Status Metadata
 
 ```text
-Status Date:             2026-08-17
-Current Phase:           Architecture complete; Roadmap Phase 0 about to start
+Status Date:             2026-08-18
+Current Phase:           Sprint 001 in progress (Roadmap Phases 0-2)
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Nothing implemented - repo skeleton + documentation only
-Overall Status:          Approved - engineer may begin S001-T002
+Implementation Status:   Toolchain, Docker Compose stack, typed settings,
+                         /health endpoint, Alembic baseline, and Source +
+                         Document persistence implemented (S001-T002..T006).
+                         No ingestion, cycle, or LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T007
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: Roadmap Phases 0-2 - toolchain, container stack, domain
-                         schema, cycle skeleton, first real ingestion
+Next Planned Capability: S001-T007 - Event + EvidencePack persistence
 ```
 
 ## 3. Current Objective
@@ -34,10 +36,24 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   `S001_WAVE0_DECISIONS.md`.
 - Reference: `ARCHITECTURE_OVERVIEW.md`, `MODULE_MAP.md`, root `CLAUDE.md`.
 - Repository under git.
+- S001-T002: toolchain and dependency baseline; `scripts/check.py` runs
+  lint + strict mypy + tests as one command.
+- S001-T003: Docker Compose stack (`app` + `db` on `pgvector/pgvector:pg16`),
+  `.env.example`, typed settings (`config/settings.py`), `GET /health`
+  reporting database connectivity and pgvector availability.
+- S001-T004: Alembic migration baseline; the `vector` extension is enabled
+  by migration `0001`, not app startup.
+- S001-T005: pure domain value objects/enums (`domain/enums.py`,
+  `evidence.py`, `embedding.py`), with an enforced no-infrastructure-import
+  boundary test and a forbidden-vocabulary test.
+- S001-T006: Source + Document persistence (`domain/document.py`,
+  `source.py`, `repositories.py`; `persistence/models.py` and repositories;
+  migration `0002`), with a DB-level immutability trigger on Document and
+  dedupe via a unique constraint + `ON CONFLICT DO NOTHING`.
 
 ## 5. Work in Progress
 
-- None. No implementation has started.
+- S001-T007 (Event + EvidencePack persistence) is the next task; not started.
 
 ## 6. Blocked Work
 
@@ -79,7 +95,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 0 / 14 |
+| 001 | Foundation to first real document | APPROVED | 6 / 14 |
 
 ## 12. Update Rules
 
