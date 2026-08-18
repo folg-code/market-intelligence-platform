@@ -12,13 +12,16 @@ Status Date:             2026-08-18
 Current Phase:           Sprint 001 in progress (Roadmap Phases 0-2)
 Current Milestone:       MVP (Roadmap Phases 0-10)
 Implementation Status:   Toolchain, Docker Compose stack, typed settings,
-                         /health endpoint, Alembic baseline, and Source +
-                         Document persistence implemented (S001-T002..T006).
-                         No ingestion, cycle, or LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T007
+                         /health endpoint, Alembic baseline, Source + Document
+                         persistence, and Event + EvidencePack persistence
+                         implemented (S001-T002..T007). No Narrative-aggregate,
+                         ingestion, cycle, or LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T008
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T007 - Event + EvidencePack persistence
+Next Planned Capability: S001-T008 - Narrative, NarrativeEpisode,
+                         NarrativeEvent, NarrativeRelation persistence,
+                         including the identity embedding column
 ```
 
 ## 3. Current Objective
@@ -50,10 +53,24 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   `source.py`, `repositories.py`; `persistence/models.py` and repositories;
   migration `0002`), with a DB-level immutability trigger on Document and
   dedupe via a unique constraint + `ON CONFLICT DO NOTHING`.
+- S001-T007: Event + EvidencePack persistence (`domain/event.py`,
+  `evidence_pack.py`; `persistence/models.py`, `event_repository.py`,
+  `evidence_pack_repository.py`; migration `0003`). `extracted_facts` and
+  `source_claims` are kept as two distinct fields, never merged (ADR-0008);
+  `source_ids` must be non-empty (DB CHECK); EvidencePack is versioned by
+  `(narrative_id, evidence_version)` (unique constraint), enforces
+  `independent_source_count <= source_count` (domain + DB CHECK), and rejects
+  every update via a DB trigger (stricter than Document's, which still allows
+  `processing_status` to advance). `market_evidence` must be empty in MVP -
+  enforced only in the domain layer (ADR-0003). `evidence_packs.narrative_id`
+  has no foreign key yet - the `narratives` table lands in T008, which adds
+  the FK (tracked in `SPRINT_001.md` S001-T008 scope).
 
 ## 5. Work in Progress
 
-- S001-T007 (Event + EvidencePack persistence) is the next task; not started.
+- S001-T008 (Narrative aggregate persistence, incl. identity embedding
+  column and the `evidence_packs.narrative_id` FK) is the next task; not
+  started.
 
 ## 6. Blocked Work
 
@@ -95,7 +112,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 6 / 14 |
+| 001 | Foundation to first real document | APPROVED | 7 / 14 |
 
 ## 12. Update Rules
 
