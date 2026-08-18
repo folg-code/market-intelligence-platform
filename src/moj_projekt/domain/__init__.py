@@ -7,6 +7,7 @@ SQLAlchemy, httpx, or the Anthropic SDK - enforced by a test
 
 from __future__ import annotations
 
+from moj_projekt.domain.document import Document, DocumentDedupeKey, ProcessingStatus
 from moj_projekt.domain.embedding import IdentityEmbedding
 from moj_projekt.domain.enums import (
     CandidateStatus,
@@ -22,9 +23,14 @@ from moj_projekt.domain.enums import (
     ValidityStatus,
 )
 from moj_projekt.domain.evidence import EvidenceRef
+from moj_projekt.domain.repositories import DocumentRepository, SourceRepository
+from moj_projekt.domain.source import Source
 
 __all__ = [
     "CandidateStatus",
+    "Document",
+    "DocumentDedupeKey",
+    "DocumentRepository",
     "EpistemicCategory",
     "EvidenceRef",
     "EvidenceRefKind",
@@ -34,7 +40,10 @@ __all__ = [
     "Instrument",
     "LifecycleStatus",
     "OverrideState",
+    "ProcessingStatus",
     "RelationType",
+    "Source",
+    "SourceRepository",
     "SourceTier",
     "ValidityStatus",
 ]
