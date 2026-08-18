@@ -15,16 +15,17 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from moj_projekt.config.settings import Settings
+from moj_projekt.persistence.models import Base
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# No ORM metadata yet: this sprint (S001-T004) only establishes the
-# migration mechanism and enables the `vector` extension. Entity tables and
-# their `target_metadata` land in later tasks (S001-T006 onward).
-target_metadata = None
+# ORM metadata for autogenerate support (S001-T006 onward). Migrations are
+# still written and reviewed explicitly - autogenerate is a drafting aid,
+# not a substitute for reading the generated script.
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:
