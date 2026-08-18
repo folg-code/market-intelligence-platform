@@ -31,12 +31,16 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 __all__ = [
+    "AlertModel",
+    "AuditEntryModel",
     "Base",
     "DocumentModel",
     "EventModel",
     "EvidencePackModel",
+    "LLMRunModel",
     "NarrativeEpisodeModel",
     "NarrativeEventModel",
+    "NarrativeInstrumentImpactModel",
     "NarrativeModel",
     "NarrativeRelationModel",
     "SourceModel",
@@ -293,8 +297,9 @@ class NarrativeEventModel(Base):
     assignment.
 
     Identity is the composite primary key ``(narrative_id, event_id)``.
-    ``llm_run_id`` has no foreign key yet - the ``llm_runs`` table lands in
-    S001-T009.
+    ``llm_run_id`` references ``llm_runs.id`` - the foreign key was added
+    in the S001-T009 migration once that table existed (it could not be
+    added when this table was first created in S001-T008).
     """
 
     __tablename__ = "narrative_events"
@@ -310,7 +315,9 @@ class NarrativeEventModel(Base):
     assignment_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="proposed"
     )
-    llm_run_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    llm_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("llm_runs.id"), nullable=True
+    )
     candidate_shortlist: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
@@ -337,3 +344,128 @@ class NarrativeRelationModel(Base):
         ForeignKey("narratives.id"), nullable=False
     )
     relation_type: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
+class LLMRunModel(Base):
+    """Row for an :class:`~moj_projekt.domain.llm_run.LLMRun` (S001-T009).
+
+    Append-only: the ``llm_runs_append_only_trigger`` from the migration
+    rejects every UPDATE and DELETE (ADR-0007).
+    """
+
+    __tablename__ = "llm_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    task_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    system_prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    input_reference_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    output_schema_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    raw_output: Mapped[str] = mapped_column(Text, nullable=False)
+    parsed_output: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    validation_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    validation_errors: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    inference_parameters: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    token_usage: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    latency: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class AuditEntryModel(Base):
+    """Row for an :class:`~moj_projekt.domain.audit_entry.AuditEntry`
+    (S001-T009).
+
+    Append-only: the ``audit_entries_append_only_trigger`` from the
+    migration rejects every UPDATE and DELETE (ADR-0009).
+    """
+
+    __tablename__ = "audit_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    actor: Mapped[str] = mapped_column(String(200), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    previous_value: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    new_value: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class NarrativeInstrumentImpactModel(Base):
+    """Row for a
+    :class:`~moj_projekt.domain.instrument_impact.NarrativeInstrumentImpact`
+    (S001-T009).
+
+    Identity is ``(narrative_id, instrument)`` - the unique constraint from
+    the migration backs the "one current assessment per pair" invariant and
+    the repository's upsert semantics (see the domain type's module
+    docstring for the versioning judgment call).
+    """
+
+    __tablename__ = "narrative_instrument_impacts"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    narrative_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("narratives.id"), nullable=False
+    )
+    instrument: Mapped[str] = mapped_column(String(10), nullable=False)
+    relevance: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    direction: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    horizon: Mapped[str] = mapped_column(String(20), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    impact_channels: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    evidence_refs: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="proposed"
+    )
+    llm_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("llm_runs.id"), nullable=True
+    )
+
+
+class AlertModel(Base):
+    """Row for an :class:`~moj_projekt.domain.alert.Alert` (S001-T009).
+
+    Deduplicated per ``(narrative_id, alert_type, trigger_key)`` by the
+    unique constraint from the migration - a repeated cycle does not
+    re-fire the same alert (DOMAIN_MODEL.md).
+    """
+
+    __tablename__ = "alerts"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    narrative_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("narratives.id"), nullable=False
+    )
+    alert_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    trigger_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
