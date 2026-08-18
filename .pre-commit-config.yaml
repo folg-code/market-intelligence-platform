@@ -1,0 +1,46 @@
+# Local quality gates, mirroring scripts/check.py so pre-commit never diverges
+# from what CI enforces (ruff check, then mypy, then pytest - no ruff format,
+# since that isn't a gate anywhere today).
+#
+# Two stages, deliberately split by cost:
+#   - `pre-commit` (default, runs on every commit): hygiene hooks, ruff lint,
+#     mypy - all fast and DB-free.
+#   - `pre-push` (runs on every push): the unit test suite. Slower than the
+#     hygiene/lint/type hooks, so it only gates pushes, not every commit.
+# Integration tests are intentionally absent from both stages - they need a
+# live PostgreSQL/pgvector database (docker compose up -d db + alembic
+# upgrade head) and stay CI-only.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: mixed-line-ending
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      - id: ruff-check
+        args: ["--no-fix"]
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict, src/)
+        entry: python -m mypy src
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: pytest
+        name: pytest (unit, DB-free)
+        entry: python -m pytest
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]

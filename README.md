@@ -71,6 +71,31 @@ tests (marker `integration`) require a live database (`docker compose up -d`
 + `alembic upgrade head`) and are excluded from the default `pytest` run;
 run them explicitly with `pytest -m integration`.
 
+### Pre-commit hooks (one-time setup)
+
+Right after `pip install -e ".[dev]"`, install the git hooks for both stages
+used by `.pre-commit-config.yaml`:
+
+```bash
+pre-commit install --install-hooks
+pre-commit install --hook-type pre-push
+```
+
+(equivalently, in one call: `pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push`)
+
+Commits then automatically get the hygiene hooks, `ruff check`, and strict
+`mypy` - the same checks `scripts/check.py` and CI run, so nothing that would
+fail CI reaches a commit. Pushes additionally run the DB-free unit test
+suite. Integration tests stay manual/CI-only, since they need a live database:
+`docker compose up -d db` + `alembic upgrade head` + `pytest -m integration`.
+
+Run everything on demand (e.g. first-time setup on an existing clone, or to
+check CI parity) with:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Status
 
 Sprint 001 ("Foundation to first real document") is in progress. See
