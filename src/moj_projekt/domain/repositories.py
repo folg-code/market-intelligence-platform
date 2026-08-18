@@ -16,12 +16,20 @@ from uuid import UUID
 from moj_projekt.domain.document import Document, ProcessingStatus
 from moj_projekt.domain.event import Event
 from moj_projekt.domain.evidence_pack import EvidencePack
+from moj_projekt.domain.narrative import Narrative
+from moj_projekt.domain.narrative_episode import NarrativeEpisode
+from moj_projekt.domain.narrative_event import NarrativeEvent
+from moj_projekt.domain.narrative_relation import NarrativeRelation
 from moj_projekt.domain.source import Source
 
 __all__ = [
     "DocumentRepository",
     "EventRepository",
     "EvidencePackRepository",
+    "NarrativeEpisodeRepository",
+    "NarrativeEventRepository",
+    "NarrativeRelationRepository",
+    "NarrativeRepository",
     "SourceRepository",
 ]
 
@@ -107,3 +115,70 @@ class EvidencePackRepository(Protocol):
     def get_version(
         self, narrative_id: UUID, evidence_version: int
     ) -> EvidencePack | None: ...
+
+
+class NarrativeRepository(Protocol):
+    """Persists and retrieves :class:`Narrative` rows, keyed by system id.
+
+    Deliberately has no "update" method: nothing in this sprint's scope
+    mutates a stored Narrative (no matching logic, no lifecycle
+    automation). ``canonical_key`` uniqueness is enforced at the database
+    level, not re-checked here.
+    """
+
+    def add(self, narrative: Narrative) -> Narrative:
+        """Persist ``narrative`` and return the stored row, with its
+        assigned ``id``. Raises if ``canonical_key`` already exists.
+        """
+        ...
+
+    def get(self, narrative_id: UUID) -> Narrative | None: ...
+
+    def get_by_canonical_key(self, canonical_key: str) -> Narrative | None: ...
+
+
+class NarrativeEpisodeRepository(Protocol):
+    """Persists and retrieves :class:`NarrativeEpisode` rows.
+
+    Overlap prevention within one Narrative is enforced at the database
+    level (an ``EXCLUDE`` constraint from the migration), since it is a
+    cross-row invariant a single episode cannot check on its own.
+    """
+
+    def add(self, episode: NarrativeEpisode) -> NarrativeEpisode:
+        """Persist ``episode`` and return the stored row. Raises if it
+        overlaps an existing episode of the same Narrative.
+        """
+        ...
+
+    def get(self, episode_id: UUID) -> NarrativeEpisode | None: ...
+
+
+class NarrativeEventRepository(Protocol):
+    """Persists and retrieves :class:`NarrativeEvent` assignments, keyed by
+    ``(narrative_id, event_id)``.
+    """
+
+    def add(self, narrative_event: NarrativeEvent) -> NarrativeEvent:
+        """Persist ``narrative_event`` and return the stored row. Raises if
+        this ``(narrative_id, event_id)`` pair already exists.
+        """
+        ...
+
+    def get(self, narrative_id: UUID, event_id: UUID) -> NarrativeEvent | None: ...
+
+
+class NarrativeRelationRepository(Protocol):
+    """Persists and retrieves :class:`NarrativeRelation` rows, keyed by
+    ``(source_narrative_id, target_narrative_id, relation_type)``.
+    """
+
+    def add(self, relation: NarrativeRelation) -> NarrativeRelation:
+        """Persist ``relation`` and return the stored row. Raises for a
+        self-relation or a duplicate ``(source, target, type)`` triple.
+        """
+        ...
+
+    def get(
+        self, relation_id: UUID
+    ) -> NarrativeRelation | None: ...

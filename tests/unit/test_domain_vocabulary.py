@@ -11,8 +11,14 @@ from pathlib import Path
 import moj_projekt.domain as domain_package
 
 FORBIDDEN_TERMS = ("sentiment_score", "prediction", "signal", "forecast")
+# Word-boundary matching: forbids the bare terms (e.g. a "signal" field or a
+# "predict_" helper) without also flagging legitimate DOMAIN_MODEL.md
+# vocabulary that happens to contain one as a substring of a compound
+# identifier, e.g. Narrative.contradiction_signals (DOMAIN_MODEL.md section
+# 3) is not "signal" - `_`/word characters keep it one token, so `\b` does
+# not match inside it.
 _WORD_PATTERN = re.compile(
-    "(" + "|".join(re.escape(term) for term in FORBIDDEN_TERMS) + ")",
+    r"\b(" + "|".join(re.escape(term) for term in FORBIDDEN_TERMS) + r")\b",
     re.IGNORECASE,
 )
 
