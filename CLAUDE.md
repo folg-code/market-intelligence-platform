@@ -69,6 +69,25 @@ was skipped for S001-T002..T006 in one session and had to be caught up in a
 single retroactive pass; don't repeat that. Sprint close still gets its own
 larger documentation/retro pass on top of this per-task sync.
 
+### Mechanical gates are pre-commit + CI's job, not tester/reviewer's
+
+Pre-commit hooks (`ruff check`, strict `mypy`, hygiene checks on every
+commit; the DB-free unit suite on every push) and CI (the same lint/type-check
+plus the full unit+integration suite against a live pgvector service, on
+every push/PR) are the mechanical quality gates. `tester` and `reviewer` do
+not re-run `ruff check`/`mypy`/the unit-test suite themselves as routine
+verification - they confirm CI is green for the exact commit under review
+(not stale, not from an earlier force-push), then spend their effort on what
+those gates cannot see: acceptance criteria against a live database
+(triggers, constraints, migrations, idempotency, concurrency), ADR/
+architecture compliance, and whether tests genuinely assert the claimed
+invariants rather than merely achieving line coverage.
+
+If CI is not green, not yet finished, or its result can't be confirmed for
+the reviewed commit, `tester`/`reviewer` fall back to re-running the
+mechanical checks themselves - the point is to cut *routine* duplication, not
+to trust an unverified CI badge.
+
 ## More
 
 Full documentation: [docs/README.md](docs/README.md)
