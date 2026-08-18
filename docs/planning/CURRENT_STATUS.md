@@ -18,14 +18,14 @@ Implementation Status:   Toolchain, Docker Compose stack, typed settings,
                          NarrativeRelation persistence,
                          NarrativeInstrumentImpact/Alert/LLMRun/AuditEntry
                          persistence, the seeded MVP Source registry, the CI
-                         pipeline, and the APScheduler-driven processing cycle
-                         skeleton implemented (S001-T002..T011, T013). No
-                         ingestion or LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T012
+                         pipeline, the APScheduler-driven processing cycle,
+                         and one live RSS source adapter (S001-T002..T013).
+                         No LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T014
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T012 - First source adapter: one RSS source to
-                         Documents inside the cycle
+Next Planned Capability: S001-T014 - WORKFLOWS.md, README quickstart, and
+                         reference docs matching the running system
 ```
 
 ## 3. Current Objective
@@ -143,11 +143,19 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   enforced twice, independently: `max_instances=1` on the APScheduler job
   wired into the FastAPI lifespan (`api/app.py`), and a partial unique index
   at the database level (ADR-0011).
+- S001-T012: First source adapter (`ingestion/adapter.py` interface;
+  `ingestion/rss.py` Bloomberg Markets RSS implementation; `cycle/ingest.py`
+  wired into the ingest stage). Feed URL is data-driven from seed
+  `endpoint_config`. Fetch failures (timeout, HTTP error, malformed feed) are
+  isolated per source on `CycleRun.source_outcomes`; the cycle still
+  `SUCCEEDED` and no partial Document is written. Dedupe reuses
+  `DocumentRepository.add()` ON CONFLICT. Live-feed test is marked `network`
+  and excluded from CI.
 
 ## 5. Work in Progress
 
-- S001-T012 (First source adapter: one RSS source to Documents inside the
-  cycle) is the next task; not started.
+- S001-T014 (`WORKFLOWS.md`, README quickstart, reference docs refresh) is
+  the next task; not started.
 
 ## 6. Blocked Work
 
@@ -180,8 +188,11 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
   adapter, no LLM, no UI) are what keep it bounded.
 - S001-T011 review follow-up (non-blocking): `cycle_runs.update()` has no
   DB-level guard against re-updating an already-terminal row (inert today,
-  worth hardening later); `Stage`'s callable signature may need a small
-  change in S001-T012 to carry per-source outcomes.
+  worth hardening later). The `Stage` callable signature was updated in
+  S001-T012 so ingest can record per-source outcomes.
+- Reuters and AP seed `feed_url` values are not live public feeds; a full
+  seed cycle records those sources failed and continues. Bloomberg Markets
+  is the live RSS source.
 
 ## 10. Next Planned Capability
 
@@ -193,7 +204,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 12 / 14 |
+| 001 | Foundation to first real document | APPROVED | 13 / 14 |
 
 ## 12. Update Rules
 
