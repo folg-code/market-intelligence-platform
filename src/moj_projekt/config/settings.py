@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     postgres_user: str = "moj_projekt"
     postgres_password: str
 
+    # The 5-minute processing cycle (ADR-0004: "The interval itself should
+    # be configuration, so tuning does not require a code change") and its
+    # APScheduler job settings (ADR-0011: max_instances=1, coalesce=True,
+    # "a bounded misfire grace" so downtime produces one catch-up cycle,
+    # not a backlog). The grace default is well under the interval itself,
+    # so a missed tick still catches up promptly rather than firing right
+    # up against the next scheduled tick.
+    cycle_interval_seconds: int = 300
+    cycle_misfire_grace_seconds: int = 60
+
     @property
     def database_url(self) -> str:
         """SQLAlchemy connection URL for the `psycopg` driver (ADR-0005)."""
