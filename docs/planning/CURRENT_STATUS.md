@@ -15,15 +15,16 @@ Implementation Status:   Toolchain, Docker Compose stack, typed settings,
                          /health endpoint, Alembic baseline, Source + Document
                          persistence, Event + EvidencePack persistence,
                          Narrative/NarrativeEpisode/NarrativeEvent/
-                         NarrativeRelation persistence, and
+                         NarrativeRelation persistence,
                          NarrativeInstrumentImpact/Alert/LLMRun/AuditEntry
-                         persistence implemented (S001-T002..T009). No source
-                         registry seed, ingestion, cycle, or LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T010
+                         persistence, the seeded MVP Source registry, and the
+                         CI pipeline implemented (S001-T002..T010, T013). No
+                         ingestion, cycle, or LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T011
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T010 - MVP Source registry seeded idempotently
-                         with tiers and publisher metadata
+Next Planned Capability: S001-T011 - Processing cycle skeleton on APScheduler
+                         with a CycleRun record and overlap prevention
 ```
 
 ## 3. Current Objective
@@ -108,11 +109,34 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   idempotent per `(narrative_id, alert_type, trigger_key)` via a unique
   constraint. Adds the `narrative_events.llm_run_id -> llm_runs.id` foreign
   key that S001-T008 had deferred until `llm_runs` existed.
+- S001-T010: MVP Source registry seed (`persistence/seed_data/sources.py`,
+  `persistence/seed_sources.py`). Declarative data only - a
+  `SEED_SOURCES` tuple of `Source` instances, no per-source branching -
+  seeded idempotently by reusing `SqlAlchemySourceRepository.add()`'s
+  existing `INSERT ... ON CONFLICT DO NOTHING` from S001-T006, so no new
+  idempotency logic was needed. Three Tier 1 primary/official sources
+  (Fed/FOMC, BLS, SEC EDGAR) and three Tier 2 professional sources
+  (Reuters, Associated Press, Bloomberg L.P.), each with a genuinely
+  distinct `publisher` - the independence-grouping key from
+  `DOMAIN_MODEL.md` section 3 - so no two seeded sources are treated as
+  independent while actually sharing an owner.
+- S001-T013: CI pipeline (`.github/workflows/ci.yml`). Two jobs on every
+  push/PR into `main` and `sprint/**`: lint (ruff) + strict mypy, then
+  (on success) unit + integration tests against a live
+  `pgvector/pgvector:pg16` service container. Credentials are supplied to
+  the test job via a written `.env` file rather than job-level `env:`
+  vars - a literal `POSTGRES_PASSWORD` environment variable would make
+  `test_missing_password_is_rejected` fail even though it never touches
+  the database, since `Settings` reads the password from `.env` without
+  it ever landing in the process environment. Verified live on the PR's
+  own CI with a deliberate red/green demonstration: an unused-import
+  commit failed the lint job (test job correctly skipped via `needs:`),
+  and reverting it restored a green run.
 
 ## 5. Work in Progress
 
-- S001-T010 (MVP Source registry seeded idempotently with tiers and
-  publisher metadata) is the next task; not started.
+- S001-T011 (Processing cycle skeleton on APScheduler with a CycleRun record
+  and overlap prevention) is the next task; not started.
 
 ## 6. Blocked Work
 
@@ -154,7 +178,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 9 / 14 |
+| 001 | Foundation to first real document | APPROVED | 11 / 14 |
 
 ## 12. Update Rules
 
