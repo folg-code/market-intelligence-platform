@@ -13,15 +13,16 @@ Current Phase:           Sprint 001 in progress (Roadmap Phases 0-2)
 Current Milestone:       MVP (Roadmap Phases 0-10)
 Implementation Status:   Toolchain, Docker Compose stack, typed settings,
                          /health endpoint, Alembic baseline, Source + Document
-                         persistence, and Event + EvidencePack persistence
-                         implemented (S001-T002..T007). No Narrative-aggregate,
-                         ingestion, cycle, or LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T008
+                         persistence, Event + EvidencePack persistence, and
+                         Narrative/NarrativeEpisode/NarrativeEvent/
+                         NarrativeRelation persistence implemented
+                         (S001-T002..T008). No impact/alert/governance
+                         persistence, ingestion, cycle, or LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T009
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T008 - Narrative, NarrativeEpisode,
-                         NarrativeEvent, NarrativeRelation persistence,
-                         including the identity embedding column
+Next Planned Capability: S001-T009 - NarrativeInstrumentImpact, Alert,
+                         LLMRun, AuditEntry persistence
 ```
 
 ## 3. Current Objective
@@ -65,12 +66,35 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   enforced only in the domain layer (ADR-0003). `evidence_packs.narrative_id`
   has no foreign key yet - the `narratives` table lands in T008, which adds
   the FK (tracked in `SPRINT_001.md` S001-T008 scope).
+- S001-T008: Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation
+  persistence (`domain/narrative.py`, `narrative_episode.py`,
+  `narrative_event.py`, `narrative_relation.py`; `persistence/models.py` and
+  the four matching repositories; migration `0004`). `canonical_key` is
+  unique; a Narrative without `economic_mechanism` or `market_interpretation`
+  is rejected; `identity_embedding` may be NULL (embedding is derived, never
+  identity - ADR-0001/ADR-0014), and a CHECK constraint keeps
+  `identity_embedding`/`embedding_model`/`embedding_version` all-null or
+  all-set together. **The `identity_embedding` column is `vector(384)`, and
+  384 is an explicitly documented placeholder dimension, not a finalized
+  choice** - it is tied to the still-open embedding-model-source decision
+  (see "Open Decisions" below); changing the model later means a migration
+  plus a re-embedding pass, not data loss. `narrative_episodes` uses a
+  Postgres `EXCLUDE USING gist` constraint (via `btree_gist`) so episodes of
+  one Narrative cannot overlap in time - NarrativeEpisode itself stays
+  optional/manual-only in MVP, with no automated lifecycle. `narrative_events`
+  has a composite primary key on `(narrative_id, event_id)`; the
+  three-condition assignment rule from `DOMAIN_MODEL.md` section 5 is not yet
+  enforced in code or the database - that is future matching-logic work, out
+  of T008's persistence-only scope. `narrative_relations` rejects
+  self-relations (CHECK) and duplicate `(source, target, type)` triples
+  (unique constraint). This task also adds the
+  `evidence_packs.narrative_id -> narratives.id` foreign key that S001-T007
+  had deferred, resolving that carried-forward note.
 
 ## 5. Work in Progress
 
-- S001-T008 (Narrative aggregate persistence, incl. identity embedding
-  column and the `evidence_packs.narrative_id` FK) is the next task; not
-  started.
+- S001-T009 (NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry
+  persistence) is the next task; not started.
 
 ## 6. Blocked Work
 
@@ -112,7 +136,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 7 / 14 |
+| 001 | Foundation to first real document | APPROVED | 8 / 14 |
 
 ## 12. Update Rules
 
