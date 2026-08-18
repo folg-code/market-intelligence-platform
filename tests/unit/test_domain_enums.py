@@ -1,6 +1,7 @@
 import pytest
 
 from moj_projekt.domain.enums import (
+    AlertType,
     CandidateStatus,
     EpistemicCategory,
     EvidenceRefKind,
@@ -109,6 +110,17 @@ def test_evidence_ref_kind_covers_document_event_and_fact() -> None:
     assert {kind.value for kind in EvidenceRefKind} == {"document", "event", "fact"}
 
 
+def test_alert_type_matches_domain_model_initial_types() -> None:
+    assert {alert_type.value for alert_type in AlertType} == {
+        "emerging_narrative",
+        "confirmed_narrative",
+        "narrative_acceleration",
+        "high_impact_event_added_to_narrative",
+        "conflicting_information",
+        "unconfirmed_social_hype",
+    }
+
+
 @pytest.mark.parametrize(
     "enum_type",
     [
@@ -122,6 +134,7 @@ def test_evidence_ref_kind_covers_document_event_and_fact() -> None:
         RelationType,
         Instrument,
         EvidenceRefKind,
+        AlertType,
     ],
 )
 def test_illegal_value_is_rejected_at_construction(enum_type: type) -> None:

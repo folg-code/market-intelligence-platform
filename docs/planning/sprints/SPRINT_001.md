@@ -100,7 +100,7 @@ board.
 | S001-T006 | Source + Document persisted, with immutability and dedupe enforced | T004, T005 | Done |
 | S001-T007 | Event + EvidencePack persisted, facts/claims kept separate | T006 | Done |
 | S001-T008 | Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation persisted, incl. the identity embedding column | T007 | Done |
-| S001-T009 | NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry persisted (append-only where required) | T008 | TODO |
+| S001-T009 | NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry persisted (append-only where required) | T008 | Done |
 | S001-T010 | MVP Source registry seeded idempotently with tiers and publisher metadata | T006 | TODO |
 | S001-T011 | Cycle skeleton on APScheduler with a CycleRun record and overlap prevention | T004, T006 | TODO |
 | S001-T012 | One live RSS source adapter producing real Documents inside the cycle | T010, T011 | TODO |

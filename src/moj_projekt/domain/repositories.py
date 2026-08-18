@@ -13,9 +13,14 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
+from moj_projekt.domain.alert import Alert
+from moj_projekt.domain.audit_entry import AuditEntry
 from moj_projekt.domain.document import Document, ProcessingStatus
+from moj_projekt.domain.enums import Instrument
 from moj_projekt.domain.event import Event
 from moj_projekt.domain.evidence_pack import EvidencePack
+from moj_projekt.domain.instrument_impact import NarrativeInstrumentImpact
+from moj_projekt.domain.llm_run import LLMRun
 from moj_projekt.domain.narrative import Narrative
 from moj_projekt.domain.narrative_episode import NarrativeEpisode
 from moj_projekt.domain.narrative_event import NarrativeEvent
@@ -23,11 +28,15 @@ from moj_projekt.domain.narrative_relation import NarrativeRelation
 from moj_projekt.domain.source import Source
 
 __all__ = [
+    "AlertRepository",
+    "AuditEntryRepository",
     "DocumentRepository",
     "EventRepository",
     "EvidencePackRepository",
+    "LLMRunRepository",
     "NarrativeEpisodeRepository",
     "NarrativeEventRepository",
+    "NarrativeInstrumentImpactRepository",
     "NarrativeRelationRepository",
     "NarrativeRepository",
     "SourceRepository",
@@ -182,3 +191,65 @@ class NarrativeRelationRepository(Protocol):
     def get(
         self, relation_id: UUID
     ) -> NarrativeRelation | None: ...
+
+
+class NarrativeInstrumentImpactRepository(Protocol):
+    """Persists and retrieves :class:`NarrativeInstrumentImpact` rows, keyed
+    by ``(narrative_id, instrument)``.
+
+    Deliberately named ``upsert``, not ``add``: DOMAIN_MODEL.md states there
+    is **one current** assessment per pair, so writing a new assessment for
+    a pair that already has one replaces it rather than raising or creating
+    a second row (a documented judgment call - see the module docstring on
+    :class:`~moj_projekt.domain.instrument_impact.NarrativeInstrumentImpact`).
+    """
+
+    def upsert(
+        self, impact: NarrativeInstrumentImpact
+    ) -> NarrativeInstrumentImpact:
+        """Persist ``impact`` as the current assessment for its
+        ``(narrative_id, instrument)`` pair, replacing any existing one.
+        """
+        ...
+
+    def get(
+        self, narrative_id: UUID, instrument: Instrument
+    ) -> NarrativeInstrumentImpact | None: ...
+
+
+class AlertRepository(Protocol):
+    """Persists and retrieves :class:`Alert` rows.
+
+    ``add`` is idempotent on the ``(narrative_id, alert_type, trigger_key)``
+    dedup key: a repeated cycle that would fire the same alert again is a
+    no-op returning the existing row, mirroring
+    :meth:`DocumentRepository.add`.
+    """
+
+    def add(self, alert: Alert) -> Alert: ...
+
+    def get(self, alert_id: UUID) -> Alert | None: ...
+
+
+class LLMRunRepository(Protocol):
+    """Persists and retrieves :class:`LLMRun` rows.
+
+    Append-only (ADR-0007): deliberately has no update or delete method,
+    and the database rejects both at the trigger level as well.
+    """
+
+    def add(self, llm_run: LLMRun) -> LLMRun: ...
+
+    def get(self, llm_run_id: UUID) -> LLMRun | None: ...
+
+
+class AuditEntryRepository(Protocol):
+    """Persists and retrieves :class:`AuditEntry` rows.
+
+    Append-only (ADR-0009): deliberately has no update or delete method,
+    and the database rejects both at the trigger level as well.
+    """
+
+    def add(self, entry: AuditEntry) -> AuditEntry: ...
+
+    def get(self, entry_id: UUID) -> AuditEntry | None: ...
