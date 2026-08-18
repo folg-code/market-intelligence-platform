@@ -1,0 +1,61 @@
+"""Idempotent seed command for the MVP Source registry (S001-T010).
+
+Usage::
+
+    python -m moj_projekt.persistence.seed_sources
+
+Reads connection settings the same way the app does (environment / ``.env``
+via :class:`~moj_projekt.config.settings.Settings`); see
+`docs/reference/WORKFLOWS.md` for local setup.
+
+Data-driven, not hard-coded branching: :func:`seed_sources` iterates the
+declarative sources in
+:mod:`moj_projekt.persistence.seed_data.sources`, calling
+``SourceRepository.add()`` for each. That method already performs
+``INSERT ... ON CONFLICT DO NOTHING`` keyed on ``Source.key``
+(:class:`~moj_projekt.persistence.source_repository.SqlAlchemySourceRepository`),
+so running this command any number of times leaves the registry unchanged
+after the first run - no additional idempotency logic is needed here.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from moj_projekt.config.settings import Settings
+from moj_projekt.domain.repositories import SourceRepository
+from moj_projekt.domain.source import Source
+from moj_projekt.persistence.seed_data.sources import SEED_SOURCES
+from moj_projekt.persistence.source_repository import SqlAlchemySourceRepository
+
+__all__ = ["seed_sources"]
+
+
+def seed_sources(session: Session) -> list[Source]:
+    """Persist every declarative seed Source, idempotently.
+
+    Returns the stored (post-upsert) rows in ``SEED_SOURCES`` order.
+    """
+    repository: SourceRepository = SqlAlchemySourceRepository(session)
+    return [repository.add(source) for source in SEED_SOURCES]
+
+
+def main() -> int:
+    """Seed the MVP Source registry against the configured database."""
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        with Session(engine) as session:
+            seeded = seed_sources(session)
+    finally:
+        engine.dispose()
+
+    for source in seeded:
+        print(f"seeded: {source.key} (tier={source.tier.name}, publisher={source.publisher})")
+    print(f"{len(seeded)} source(s) in registry after seed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
