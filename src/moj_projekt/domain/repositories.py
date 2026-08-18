@@ -1,6 +1,7 @@
-"""Repository interfaces for the Ingestion bounded context.
+"""Repository interfaces for the Ingestion, Event Extraction, and Evidence &
+Trust bounded contexts.
 
-Domain code (and anything calling into ingestion) depends on these
+Domain code (and anything calling into these contexts) depends on these
 interfaces, never on a SQLAlchemy session directly - "Persistence is reached
 through repository interfaces" (root ``CLAUDE.md``). No SQLAlchemy type
 appears in any signature here (Wave 0 decision D-S001-04); implementations
@@ -13,9 +14,16 @@ from typing import Protocol
 from uuid import UUID
 
 from moj_projekt.domain.document import Document, ProcessingStatus
+from moj_projekt.domain.event import Event
+from moj_projekt.domain.evidence_pack import EvidencePack
 from moj_projekt.domain.source import Source
 
-__all__ = ["DocumentRepository", "SourceRepository"]
+__all__ = [
+    "DocumentRepository",
+    "EventRepository",
+    "EvidencePackRepository",
+    "SourceRepository",
+]
 
 
 class SourceRepository(Protocol):
@@ -59,3 +67,43 @@ class DocumentRepository(Protocol):
         Rejects (raises) a transition that would move the status backwards.
         """
         ...
+
+
+class EventRepository(Protocol):
+    """Persists and retrieves :class:`Event` rows.
+
+    Deliberately has no "update" method - there is no operation defined on
+    an Event after it is stored.
+    """
+
+    def add(self, event: Event) -> Event:
+        """Persist ``event`` and return the stored row, with its assigned
+        ``id``.
+        """
+        ...
+
+    def get(self, event_id: UUID) -> Event | None: ...
+
+
+class EvidencePackRepository(Protocol):
+    """Persists and retrieves :class:`EvidencePack` snapshots.
+
+    Deliberately has no "update" method: an EvidencePack is never mutated
+    in place - a rebuild produces a new ``evidence_version`` (ADR-0003).
+    """
+
+    def add(self, evidence_pack: EvidencePack) -> EvidencePack:
+        """Persist ``evidence_pack`` as a new version and return the stored
+        row. Raises if ``(narrative_id, evidence_version)`` already exists.
+        """
+        ...
+
+    def get_current(self, narrative_id: UUID) -> EvidencePack | None:
+        """Return the highest-``evidence_version`` pack for ``narrative_id``,
+        or ``None`` if the narrative has no pack yet.
+        """
+        ...
+
+    def get_version(
+        self, narrative_id: UUID, evidence_version: int
+    ) -> EvidencePack | None: ...
