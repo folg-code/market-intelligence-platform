@@ -58,4 +58,5 @@ testpaths = ["tests"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: requires a live PostgreSQL/pgvector database (see compose.yaml)",
+    "network: requires live network access to an external source (S001-T013; no test uses this marker yet - it is a mechanism reserved for S001-T012's source adapter)",
 ]
