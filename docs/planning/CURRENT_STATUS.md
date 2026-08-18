@@ -17,14 +17,15 @@ Implementation Status:   Toolchain, Docker Compose stack, typed settings,
                          Narrative/NarrativeEpisode/NarrativeEvent/
                          NarrativeRelation persistence,
                          NarrativeInstrumentImpact/Alert/LLMRun/AuditEntry
-                         persistence, the seeded MVP Source registry, and the
-                         CI pipeline implemented (S001-T002..T010, T013). No
-                         ingestion, cycle, or LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T011
+                         persistence, the seeded MVP Source registry, the CI
+                         pipeline, and the APScheduler-driven processing cycle
+                         skeleton implemented (S001-T002..T011, T013). No
+                         ingestion or LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T012
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T011 - Processing cycle skeleton on APScheduler
-                         with a CycleRun record and overlap prevention
+Next Planned Capability: S001-T012 - First source adapter: one RSS source to
+                         Documents inside the cycle
 ```
 
 ## 3. Current Objective
@@ -132,11 +133,21 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   own CI with a deliberate red/green demonstration: an unused-import
   commit failed the lint job (test job correctly skipped via `needs:`),
   and reverting it restored a green run.
+- S001-T011: Processing cycle skeleton on APScheduler (`domain/clock.py`'s
+  `Clock`/`SystemClock`; `domain/cycle_run.py`'s `CycleRun`/`CycleRunStatus`/
+  `StageOutcome`; `cycle/stages.py`'s ordered six-stage list - ingest,
+  extract, narratives, evidence, state, alerts - all no-op until S001-T012;
+  `cycle/run_cycle.py` orchestrating them with per-stage failure isolation to
+  one terminal `CycleRun`; `cycle/run_once.py` as a direct, scheduler-free
+  entrypoint; migration `0006` adding `cycle_runs`). Overlap prevention is
+  enforced twice, independently: `max_instances=1` on the APScheduler job
+  wired into the FastAPI lifespan (`api/app.py`), and a partial unique index
+  at the database level (ADR-0011).
 
 ## 5. Work in Progress
 
-- S001-T011 (Processing cycle skeleton on APScheduler with a CycleRun record
-  and overlap prevention) is the next task; not started.
+- S001-T012 (First source adapter: one RSS source to Documents inside the
+  cycle) is the next task; not started.
 
 ## 6. Blocked Work
 
@@ -167,6 +178,10 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
   soon as ingestion is live.
 - Sprint 001 spans three roadmap phases; the hard out-of-scope lines (one
   adapter, no LLM, no UI) are what keep it bounded.
+- S001-T011 review follow-up (non-blocking): `cycle_runs.update()` has no
+  DB-level guard against re-updating an already-terminal row (inert today,
+  worth hardening later); `Stage`'s callable signature may need a small
+  change in S001-T012 to carry per-source outcomes.
 
 ## 10. Next Planned Capability
 
@@ -178,7 +193,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 11 / 14 |
+| 001 | Foundation to first real document | APPROVED | 12 / 14 |
 
 ## 12. Update Rules
 
