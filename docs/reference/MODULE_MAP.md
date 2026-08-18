@@ -18,7 +18,8 @@ src/moj_projekt/
                  embedding.py - value objects, invariants, repository
                  interfaces (implemented for Source/Document/Event/
                  EvidencePack/Narrative/NarrativeEpisode/NarrativeEvent/
-                 NarrativeRelation; impact/alert/governance types land in T009)
+                 NarrativeRelation/NarrativeInstrumentImpact/Alert/LLMRun/
+                 AuditEntry)
   persistence/   models.py, document_repository.py, source_repository.py,
                  event_repository.py, evidence_pack_repository.py,
                  narrative_repository.py, narrative_episode_repository.py,
@@ -54,8 +55,8 @@ tests/           unit/ (no infrastructure, default pytest run) +
 | Module | Responsibility | Status | Depends on | May NOT depend on |
 |---|---|---|---|---|
 | `config` | Load and validate settings from the environment (`Settings`, `get_settings`) | Implemented | - | anything project-specific |
-| `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, enums, evidence, embedding descriptor; impact/alert/governance types are T009 | `config` (only for pure values) | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
-| `persistence` | Map domain objects to PostgreSQL; implement repository interfaces | Implemented for Source, Document (with DB-level immutability trigger + dedupe via unique constraint/`ON CONFLICT DO NOTHING`), Event (non-empty `source_ids` CHECK), EvidencePack (immutability trigger + `independent_source_count <= source_count` CHECK), Narrative (unique `canonical_key`, `identity_embedding vector(384)` placeholder dimension with an all-or-nothing CHECK against embedding_model/embedding_version), NarrativeEpisode (`EXCLUDE USING gist` preventing overlap per narrative), NarrativeEvent (composite PK), NarrativeRelation (self-relation CHECK + unique triple), plus the health check | `domain`, `config` | `ingestion`, `cycle`, `api` |
+| `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, enums, evidence, embedding descriptor | `config` (only for pure values) | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
+| `persistence` | Map domain objects to PostgreSQL; implement repository interfaces | Implemented for Source, Document (with DB-level immutability trigger + dedupe via unique constraint/`ON CONFLICT DO NOTHING`), Event (non-empty `source_ids` CHECK), EvidencePack (immutability trigger + `independent_source_count <= source_count` CHECK), Narrative (unique `canonical_key`, `identity_embedding vector(384)` placeholder dimension with an all-or-nothing CHECK against embedding_model/embedding_version), NarrativeEpisode (`EXCLUDE USING gist` preventing overlap per narrative), NarrativeEvent (composite PK), NarrativeRelation (self-relation CHECK + unique triple), NarrativeInstrumentImpact (upsert via `INSERT ... ON CONFLICT DO UPDATE` on `(narrative_id, instrument)`, non-neutral-direction CHECK), Alert (unique `(narrative_id, alert_type, trigger_key)`), LLMRun and AuditEntry (append-only trigger rejecting UPDATE and DELETE, `LLMRun` "latest"-alias CHECK), plus the health check | `domain`, `config` | `ingestion`, `cycle`, `api` |
 | `ingestion` | Fetch and normalize external sources into Documents; per-source failure isolation | Stub (empty package) - S001-T012 | `domain`, `config` | `cycle`, `api` |
 | `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler registration | Stub (empty package) - S001-T011 | `domain`, `ingestion`, `persistence` | `api` |
 | `api` | ASGI app, lifespan, `GET /health` (db connectivity + pgvector availability) | Implemented for health; scheduler start/stop and dashboard read path are later tasks | all of the above | - |

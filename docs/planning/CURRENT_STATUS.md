@@ -13,16 +13,17 @@ Current Phase:           Sprint 001 in progress (Roadmap Phases 0-2)
 Current Milestone:       MVP (Roadmap Phases 0-10)
 Implementation Status:   Toolchain, Docker Compose stack, typed settings,
                          /health endpoint, Alembic baseline, Source + Document
-                         persistence, Event + EvidencePack persistence, and
+                         persistence, Event + EvidencePack persistence,
                          Narrative/NarrativeEpisode/NarrativeEvent/
-                         NarrativeRelation persistence implemented
-                         (S001-T002..T008). No impact/alert/governance
-                         persistence, ingestion, cycle, or LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T009
+                         NarrativeRelation persistence, and
+                         NarrativeInstrumentImpact/Alert/LLMRun/AuditEntry
+                         persistence implemented (S001-T002..T009). No source
+                         registry seed, ingestion, cycle, or LLM code yet.
+Overall Status:          Approved - engineer continues with S001-T010
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T009 - NarrativeInstrumentImpact, Alert,
-                         LLMRun, AuditEntry persistence
+Next Planned Capability: S001-T010 - MVP Source registry seeded idempotently
+                         with tiers and publisher metadata
 ```
 
 ## 3. Current Objective
@@ -90,11 +91,28 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   (unique constraint). This task also adds the
   `evidence_packs.narrative_id -> narratives.id` foreign key that S001-T007
   had deferred, resolving that carried-forward note.
+- S001-T009: NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry persistence
+  (`domain/instrument_impact.py`, `alert.py`, `llm_run.py`, `audit_entry.py`,
+  `AlertType` in `enums.py`; `persistence/models.py` and four matching
+  repositories; migration `0005`). One current impact assessment per
+  `(narrative, instrument)` via `upsert()` backed by
+  `INSERT ... ON CONFLICT DO UPDATE` against a unique constraint - a
+  documented judgment call, since `DOMAIN_MODEL.md` gives this entity no
+  versioning language the way it does for `EvidencePack`. A DB-level CHECK
+  mirrors the domain rule that a non-neutral `direction` requires a
+  rationale and non-empty `evidence_refs` (ADR-0006). `LLMRun` and
+  `AuditEntry` are append-only, enforced by a DB trigger rejecting both
+  UPDATE and DELETE (stricter than `EvidencePack`'s update-only trigger, per
+  ADR-0007/ADR-0009). `LLMRun` rejects `model`/`model_version == "latest"` at
+  both construction and via a DB-level CHECK (ADR-0010). `Alert.add()` is
+  idempotent per `(narrative_id, alert_type, trigger_key)` via a unique
+  constraint. Adds the `narrative_events.llm_run_id -> llm_runs.id` foreign
+  key that S001-T008 had deferred until `llm_runs` existed.
 
 ## 5. Work in Progress
 
-- S001-T009 (NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry
-  persistence) is the next task; not started.
+- S001-T010 (MVP Source registry seeded idempotently with tiers and
+  publisher metadata) is the next task; not started.
 
 ## 6. Blocked Work
 
@@ -136,7 +154,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 8 / 14 |
+| 001 | Foundation to first real document | APPROVED | 9 / 14 |
 
 ## 12. Update Rules
 
