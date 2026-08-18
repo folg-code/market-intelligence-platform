@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -32,10 +32,12 @@ from moj_projekt.domain.enums import EvidenceRefKind
 from moj_projekt.domain.event import Event
 from moj_projekt.domain.evidence import EvidenceRef
 from moj_projekt.domain.evidence_pack import EvidencePack
+from moj_projekt.domain.narrative import Narrative
 from moj_projekt.persistence.event_repository import SqlAlchemyEventRepository
 from moj_projekt.persistence.evidence_pack_repository import (
     SqlAlchemyEvidencePackRepository,
 )
+from moj_projekt.persistence.narrative_repository import SqlAlchemyNarrativeRepository
 
 pytestmark = pytest.mark.integration
 
@@ -100,6 +102,28 @@ def _make_pack(**overrides: object) -> EvidencePack:
     return EvidencePack(**defaults)  # type: ignore[arg-type]
 
 
+def _seed_narrative(session: Session) -> UUID:
+    """Create a Narrative and return its id.
+
+    ``evidence_packs.narrative_id`` gained a foreign key to ``narratives.id``
+    in the S001-T008 migration, so a real Narrative row must exist before an
+    EvidencePack referencing it can be inserted.
+    """
+    narrative = Narrative(
+        canonical_key=f"narrative_{uuid4().hex[:8]}",
+        display_title="Fed rate cut expectations",
+        economic_mechanism="Lower policy rate reduces the discount rate.",
+        market_interpretation="Bullish for risk assets.",
+        category="monetary_policy",
+        first_seen=_GENERATED_AT,
+        last_seen=_GENERATED_AT,
+        updated_at=_GENERATED_AT,
+    )
+    stored = SqlAlchemyNarrativeRepository(session).add(narrative)
+    assert stored.id is not None
+    return stored.id
+
+
 def test_event_round_trips_with_facts_and_claims_kept_separate(
     migrated_session: Session,
 ) -> None:
@@ -150,7 +174,7 @@ def test_evidence_pack_rebuild_creates_a_new_version_row(
     migrated_session: Session,
 ) -> None:
     repo = SqlAlchemyEvidencePackRepository(migrated_session)
-    narrative_id = uuid4()
+    narrative_id = _seed_narrative(migrated_session)
     first = repo.add(_make_pack(narrative_id=narrative_id, evidence_version=1))
     second = repo.add(_make_pack(narrative_id=narrative_id, evidence_version=2))
 
@@ -168,7 +192,8 @@ def test_evidence_pack_rebuild_creates_a_new_version_row(
 
 def test_evidence_pack_row_is_never_mutated(migrated_session: Session) -> None:
     repo = SqlAlchemyEvidencePackRepository(migrated_session)
-    stored = repo.add(_make_pack())
+    narrative_id = _seed_narrative(migrated_session)
+    stored = repo.add(_make_pack(narrative_id=narrative_id))
 
     with pytest.raises(DBAPIError, match="immutable"):
         migrated_session.execute(
@@ -184,6 +209,7 @@ def test_evidence_pack_row_is_never_mutated(migrated_session: Session) -> None:
 def test_independent_source_count_le_source_count_enforced_at_the_database(
     migrated_session: Session,
 ) -> None:
+    narrative_id = _seed_narrative(migrated_session)
     with pytest.raises(
         IntegrityError, match="ck_evidence_packs_independent_le_source_count"
     ):
@@ -194,7 +220,7 @@ def test_independent_source_count_le_source_count_enforced_at_the_database(
                 "independent_source_count, source_diversity) "
                 "VALUES (:nid, 1, :generated_at, 1, 2, 1)"
             ),
-            {"nid": uuid4(), "generated_at": _GENERATED_AT},
+            {"nid": narrative_id, "generated_at": _GENERATED_AT},
         )
         migrated_session.commit()
     migrated_session.rollback()
@@ -204,9 +230,14 @@ def test_evidence_pack_traces_evidence_to_documents_and_events(
     migrated_session: Session,
 ) -> None:
     repo = SqlAlchemyEvidencePackRepository(migrated_session)
+    narrative_id = _seed_narrative(migrated_session)
     document_ref = EvidenceRef(kind=EvidenceRefKind.DOCUMENT, target_id=str(uuid4()))
     event_ref = EvidenceRef(kind=EvidenceRefKind.EVENT, target_id=str(uuid4()))
-    pack = _make_pack(supporting_evidence=(document_ref,), official_evidence=(event_ref,))
+    pack = _make_pack(
+        narrative_id=narrative_id,
+        supporting_evidence=(document_ref,),
+        official_evidence=(event_ref,),
+    )
 
     stored = repo.add(pack)
     fetched = repo.get_version(stored.narrative_id, stored.evidence_version)
