@@ -296,6 +296,51 @@ def test_audit_entries_reject_delete(migrated_session: Session) -> None:
     migrated_session.rollback()
 
 
+def test_llm_runs_reject_latest_model_at_the_database(
+    migrated_session: Session,
+) -> None:
+    # The domain constructor already rejects this (LLMRun.__post_init__), so
+    # exercising the CHECK constraint requires bypassing it with a raw
+    # INSERT (reviewer finding on S001-T009: the domain-only check left no
+    # backstop against a direct SQL insert).
+    with pytest.raises(IntegrityError, match="ck_llm_runs_no_latest_alias"):
+        migrated_session.execute(
+            text(
+                "INSERT INTO llm_runs "
+                "(task_type, provider, model, model_version, prompt_version, "
+                "system_prompt_version, input_hash, input_reference_ids, "
+                "output_schema_version, raw_output, validation_status, "
+                "created_at) "
+                "VALUES ('instrument_impact', 'anthropic', 'Latest', "
+                "'20250929', 'v1', 'v1', 'abc123', '[\"event:1234\"]'::jsonb, "
+                "'v1', '{}', 'accepted', now())"
+            )
+        )
+        migrated_session.commit()
+    migrated_session.rollback()
+
+
+def test_llm_runs_reject_latest_model_version_at_the_database(
+    migrated_session: Session,
+) -> None:
+    with pytest.raises(IntegrityError, match="ck_llm_runs_no_latest_alias"):
+        migrated_session.execute(
+            text(
+                "INSERT INTO llm_runs "
+                "(task_type, provider, model, model_version, prompt_version, "
+                "system_prompt_version, input_hash, input_reference_ids, "
+                "output_schema_version, raw_output, validation_status, "
+                "created_at) "
+                "VALUES ('instrument_impact', 'anthropic', "
+                "'claude-sonnet-4-5-20250929', 'LATEST', 'v1', 'v1', "
+                "'abc123', '[\"event:1234\"]'::jsonb, 'v1', '{}', "
+                "'accepted', now())"
+            )
+        )
+        migrated_session.commit()
+    migrated_session.rollback()
+
+
 def test_llm_run_carries_reproducibility_fields(migrated_session: Session) -> None:
     stored = SqlAlchemyLLMRunRepository(migrated_session).add(_make_llm_run())
     fetched = SqlAlchemyLLMRunRepository(migrated_session).get(stored.id)  # type: ignore[arg-type]

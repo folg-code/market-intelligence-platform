@@ -8,7 +8,13 @@ Adds the last MVP entities from DOMAIN_MODEL.md section 3 (S001-T009):
 
 - ``llm_runs`` - the append-only LLM reproducibility record (ADR-0007).
   Created first in this migration so ``narrative_events.llm_run_id`` and
-  ``narrative_instrument_impacts.llm_run_id`` can reference it.
+  ``narrative_instrument_impacts.llm_run_id`` can reference it. A CHECK
+  constraint (``ck_llm_runs_no_latest_alias``) mirrors the domain-level rule
+  (``LLMRun.__post_init__``) that ``model``/``model_version`` must be pinned
+  identifiers, never the floating alias ``"latest"`` (case-insensitive,
+  ADR-0010) - unlike the ``narrative_instrument_impacts`` evidence rule
+  below, this invariant is not expected to become obsolete, so it gets a
+  database-level backstop in addition to the domain constructor check.
 - ``audit_entries`` - the append-only human-side audit trail (ADR-0009).
 - ``narrative_instrument_impacts`` - one **current** assessment per
   ``(narrative_id, instrument)`` pair (unique constraint), not a versioned
@@ -117,6 +123,11 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "latency >= 0.0", name="ck_llm_runs_latency_non_negative"
+        ),
+        sa.CheckConstraint(
+            "trim(lower(model)) <> 'latest' "
+            "AND trim(lower(model_version)) <> 'latest'",
+            name="ck_llm_runs_no_latest_alias",
         ),
     )
 
