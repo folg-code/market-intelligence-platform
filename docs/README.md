@@ -13,7 +13,7 @@
 | `planning/sprints/` | Sprint scope, task breakdown, Wave 0 decisions | per sprint |
 | `reference/ARCHITECTURE_OVERVIEW.md` | The component picture as it actually is | updated continuously |
 | `reference/MODULE_MAP.md` | Code layout, module responsibilities, dependency direction | updated continuously |
-| `reference/WORKFLOWS.md` | How to set up and run things (created in Sprint 001, task S001-T014) | updated continuously |
+| `reference/WORKFLOWS.md` | How to set up and run things: clone, compose, migrate, seed, one cycle, checks | updated continuously |
 
 Also at the repo root: `CLAUDE.md` - project-specific coding conventions, loaded
 automatically in every session.
