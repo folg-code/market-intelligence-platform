@@ -70,7 +70,10 @@ def test_run_cycle_reaches_succeeded_with_clock_supplied_timestamps() -> None:
     ended_at = _T0 + timedelta(seconds=3)
     clock = _FakeClock([_T0, ended_at])
     repository = _FakeCycleRunRepository()
-    stages = [Stage("ingest", lambda: None), Stage("extract", lambda: None)]
+    stages = [
+        Stage("ingest", lambda cycle_run: cycle_run),
+        Stage("extract", lambda cycle_run: cycle_run),
+    ]
 
     result = run_cycle(clock=clock, repository=repository, stages=stages)
 
@@ -90,10 +93,10 @@ def test_run_cycle_catches_a_raising_stage_and_still_reaches_a_terminal_state() 
     clock = _FakeClock([_T0, ended_at])
     repository = _FakeCycleRunRepository()
 
-    def _boom() -> None:
+    def _boom(cycle_run: CycleRun) -> CycleRun:
         raise RuntimeError("source unavailable")
 
-    stages = [Stage("ingest", _boom), Stage("extract", lambda: None)]
+    stages = [Stage("ingest", _boom), Stage("extract", lambda cycle_run: cycle_run)]
 
     result = run_cycle(clock=clock, repository=repository, stages=stages)
 
@@ -117,7 +120,7 @@ def test_run_cycle_records_exactly_one_cycle_run_even_when_a_stage_raises() -> N
     clock = _FakeClock([_T0, _T0 + timedelta(seconds=1)])
     repository = _FakeCycleRunRepository()
 
-    def _boom() -> None:
+    def _boom(cycle_run: CycleRun) -> CycleRun:
         raise ValueError("boom")
 
     run_cycle(clock=clock, repository=repository, stages=[Stage("ingest", _boom)])
@@ -132,7 +135,7 @@ def test_run_cycle_no_ops_when_a_run_is_already_in_progress() -> None:
     clock = _FakeClock([_T0])  # would raise StopIteration if now() were called
 
     result = run_cycle(
-        clock=clock, repository=repository, stages=[Stage("ingest", lambda: None)]
+        clock=clock, repository=repository, stages=[Stage("ingest", lambda cycle_run: cycle_run)]
     )
 
     assert result is None
@@ -146,7 +149,7 @@ def test_run_cycle_no_op_does_not_call_the_clock() -> None:
     clock = _FakeClock([])  # calling now() would raise StopIteration
 
     result = run_cycle(
-        clock=clock, repository=repository, stages=[Stage("ingest", lambda: None)]
+        clock=clock, repository=repository, stages=[Stage("ingest", lambda cycle_run: cycle_run)]
     )
 
     assert result is None
@@ -178,7 +181,7 @@ def test_run_cycle_reports_failure_from_any_stage_position(stage_index: int) -> 
     clock = _FakeClock([_T0, _T0 + timedelta(seconds=1)])
     repository = _FakeCycleRunRepository()
 
-    def _boom() -> None:
+    def _boom(cycle_run: CycleRun) -> CycleRun:
         raise RuntimeError("failed here")
 
     stages = list(DEFAULT_STAGES)

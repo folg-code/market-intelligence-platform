@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -54,3 +55,11 @@ class SqlAlchemySourceRepository:
     def get(self, key: str) -> Source | None:
         row = self._session.get(SourceModel, key)
         return _to_domain(row) if row is not None else None
+
+    def list_active(self) -> list[Source]:
+        rows = self._session.scalars(
+            select(SourceModel)
+            .where(SourceModel.active.is_(True))
+            .order_by(SourceModel.key)
+        ).all()
+        return [_to_domain(row) for row in rows]

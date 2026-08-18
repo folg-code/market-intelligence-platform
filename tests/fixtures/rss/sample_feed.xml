@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fixture Markets</title>
+    <link>https://example.com/markets</link>
+    <description>Recorded RSS fixture for adapter unit tests. Not a live feed.</description>
+    <item>
+      <title>Central bank holds policy rate</title>
+      <link>https://example.com/markets/article-rate-hold</link>
+      <guid isPermaLink="false">fixture-guid-rate-hold</guid>
+      <pubDate>Mon, 17 Aug 2026 14:00:00 GMT</pubDate>
+      <description>The central bank left its policy rate unchanged after the latest meeting.</description>
+    </item>
+    <item>
+      <title>Oil inventories fall more than expected</title>
+      <link>https://example.com/markets/article-oil-inventories</link>
+      <guid isPermaLink="false">fixture-guid-oil</guid>
+      <pubDate>Mon, 17 Aug 2026 15:30:00 GMT</pubDate>
+      <description>Crude stockpiles dropped as refiners drew down inventories.</description>
+    </item>
+    <item>
+      <title>Entry missing a link is skipped</title>
+      <guid isPermaLink="false">fixture-guid-skipped</guid>
+      <pubDate>Mon, 17 Aug 2026 16:00:00 GMT</pubDate>
+      <description>This item has no link, so the adapter must skip it.</description>
+    </item>
+  </channel>
+</rss>

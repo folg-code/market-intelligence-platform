@@ -81,11 +81,10 @@ class CycleRun:
     ordered pipeline stages
     (:data:`moj_projekt.cycle.stages.DEFAULT_STAGES`) succeeded.
     ``source_outcomes`` is the equivalent per-source map for ingestion
-    failures - empty in this task (S001-T011), since no real ingestion
-    exists yet; S001-T012 populates it. ``failure_reason`` is the top-level
-    reason the cycle as a whole is ``FAILED`` (e.g. naming which stage
-    raised); it is distinct from any individual stage's own
-    ``failure_reason`` in ``stage_outcomes``.
+    failures - populated by the ingest stage (S001-T012).
+    ``failure_reason`` is the top-level reason the cycle as a whole is
+    ``FAILED`` (e.g. naming which stage raised); it is distinct from any
+    individual stage's own ``failure_reason`` in ``stage_outcomes``.
     """
 
     started_at: datetime
@@ -124,6 +123,18 @@ class CycleRun:
         if self.status.is_terminal:
             raise ValueError("cannot record a stage outcome on a terminal CycleRun")
         return replace(self, stage_outcomes={**self.stage_outcomes, stage: outcome})
+
+    def with_source_outcome(self, source_key: str, outcome: StageOutcome) -> CycleRun:
+        """Return a copy with ``source_key`` recorded in ``source_outcomes``.
+
+        Same terminal-state guard as :meth:`with_stage_outcome`: per-source
+        ingest results are only meaningful while the cycle is still running.
+        """
+        if self.status.is_terminal:
+            raise ValueError("cannot record a source outcome on a terminal CycleRun")
+        return replace(
+            self, source_outcomes={**self.source_outcomes, source_key: outcome}
+        )
 
     def finish(
         self,
