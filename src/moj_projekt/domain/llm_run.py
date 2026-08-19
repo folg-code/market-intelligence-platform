@@ -18,9 +18,22 @@ from uuid import UUID
 
 from moj_projekt.domain.enums import CandidateStatus
 
-__all__ = ["LLMRun"]
+__all__ = ["FLOATING_MODEL_ALIASES", "LLMRun", "reject_floating_model_alias"]
 
-_FLOATING_MODEL_ALIASES = {"latest"}
+FLOATING_MODEL_ALIASES: frozenset[str] = frozenset({"latest"})
+
+
+def reject_floating_model_alias(value: str, *, field_name: str) -> None:
+    """Reject a floating model alias such as ``latest`` (ADR-0010).
+
+    Shared by :class:`LLMRun` and the ``llm/`` rate table so a dated pin is
+    checked by one rule, not two copies.
+    """
+    if value.strip().lower() in FLOATING_MODEL_ALIASES:
+        raise ValueError(
+            f"{field_name} must be a pinned model identifier, never a "
+            "floating alias such as 'latest' (ADR-0010)"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,16 +86,8 @@ class LLMRun:
                 "LLMRun.input_reference_ids must not be empty - input_hash "
                 "alone is not sufficient for reproducibility (ADR-0007)"
             )
-        if self.model.strip().lower() in _FLOATING_MODEL_ALIASES:
-            raise ValueError(
-                "LLMRun.model must be a pinned model identifier, never a "
-                "floating alias such as 'latest' (ADR-0010)"
-            )
-        if self.model_version.strip().lower() in _FLOATING_MODEL_ALIASES:
-            raise ValueError(
-                "LLMRun.model_version must be a pinned identifier, never a "
-                "floating alias such as 'latest' (ADR-0010)"
-            )
+        reject_floating_model_alias(self.model, field_name="LLMRun.model")
+        reject_floating_model_alias(self.model_version, field_name="LLMRun.model_version")
         if self.temperature < 0.0:
             raise ValueError("LLMRun.temperature must not be negative")
         if self.latency < 0.0:
