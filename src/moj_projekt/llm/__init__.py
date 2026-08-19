@@ -6,7 +6,8 @@ See ``src/moj_projekt/llm/CLAUDE.md``.
 
 from __future__ import annotations
 
-from moj_projekt.llm.anthropic_client import AnthropicClient
+from typing import TYPE_CHECKING, Any
+
 from moj_projekt.llm.artifacts import (
     ArtifactVersions,
     extraction_artifact_versions,
@@ -23,6 +24,9 @@ from moj_projekt.llm.models import (
     ModelSpec,
     model_spec_for,
 )
+
+if TYPE_CHECKING:
+    from moj_projekt.llm.anthropic_client import AnthropicClient as AnthropicClient
 
 __all__ = [
     "EVENT_EXTRACTION_TASK_TYPE",
@@ -42,3 +46,12 @@ __all__ = [
     "model_spec_for",
     "render_extraction_prompt",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load ``AnthropicClient`` only when asked, so artifacts stay SDK-free."""
+    if name == "AnthropicClient":
+        from moj_projekt.llm.anthropic_client import AnthropicClient as client_cls
+
+        return client_cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -8,6 +8,8 @@ as ``tests/unit/test_domain_boundary.py``.
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 import moj_projekt.extraction as extraction_package
@@ -54,6 +56,30 @@ def test_extraction_source_imports_no_infrastructure_modules() -> None:
         "extraction/ must not import infrastructure modules "
         f"(S002-T007, ADR-0002): {violations}"
     )
+
+
+def test_importing_extraction_does_not_load_infrastructure_at_runtime() -> None:
+    """AST isolation is not enough: ``from moj_projekt.llm.artifacts import ...``
+    still executes ``llm/__init__.py``. A subprocess proves the SDK stays cold.
+    """
+    script = (
+        "import sys\n"
+        "import moj_projekt.extraction  # noqa: F401\n"
+        "forbidden = {'anthropic', 'httpx', 'sqlalchemy'}\n"
+        "loaded = sorted(\n"
+        "    {name.split('.', 1)[0] for name in sys.modules\n"
+        "     if name.split('.', 1)[0] in forbidden}\n"
+        ")\n"
+        "assert not loaded, loaded\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def test_extraction_does_not_construct_event() -> None:
