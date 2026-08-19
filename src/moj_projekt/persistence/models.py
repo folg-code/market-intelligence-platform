@@ -422,7 +422,9 @@ class CycleRunModel(Base):
     unique index from the migration (not expressible here) enforces "at
     most one RUNNING row" at the database level too, mirroring
     ``narrative_episodes``'s EXCLUDE-constraint pattern of backing a
-    cross-row domain invariant with a DB constraint.
+    cross-row domain invariant with a DB constraint. A ``BEFORE UPDATE``
+    trigger from migration ``0007`` rejects any write to a row that is
+    already terminal (PRB-004).
     """
 
     __tablename__ = "cycle_runs"

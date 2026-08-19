@@ -117,10 +117,12 @@ having been evaluated, and the evaluation outcome is itself stored.
 
 ---
 
+## 6. Resolved Problems
+
 ### PRB-004 - `cycle_runs` has no database guard against re-updating a terminal row
 
 ```text
-Status:       OPEN
+Status:       RESOLVED (2026-08-19)
 Severity:     LOW
 Domain:       Cycle / persistence
 Owner:        unassigned
@@ -131,33 +133,31 @@ Last Updated: 2026-08-19
 #### Description
 
 `CycleRun` rows move from a running state to exactly one terminal state. The
-repository's `update()` has no database-level guard preventing an
+repository's `update()` had no database-level guard preventing an
 already-terminal row from being updated again - unlike the immutability and
 append-only triggers used elsewhere in the schema (`documents`,
 `evidence_packs`, `llm_runs`, `audit_entries`).
 
 #### Evidence
 
-- Migration `0006_create_cycle_run.py` (partial unique index for overlap
-  prevention, no terminal-state trigger).
+- Migration `0006_create_cycle_run.py` had the partial unique index for overlap
+  prevention, but no terminal-state trigger.
 - Recorded as a non-blocking S001-T011 review follow-up in `CURRENT_STATUS.md`
   section 9.
 
 #### Impact
 
-Inert today: only `cycle/run_cycle.py` writes `CycleRun` rows, and it writes
-one terminal state per run. It becomes a real risk if a retry, a resume path,
-or a second writer is added.
+Inert at discovery: only `cycle/run_cycle.py` wrote `CycleRun` rows, and it
+writes one terminal state per run. It would have become a real risk if a
+retry, a resume path, or a second writer were added.
 
-#### Possible Directions
+#### Resolution
 
-- A `BEFORE UPDATE` trigger rejecting updates to rows already in a terminal
-  status, in the same pattern as the existing triggers.
-
-#### Decision or Resolution Criteria
-
-Address before any code path can write a `CycleRun` more than once (retry,
-resume, or observability backfill). Roadmap Phase 10 at the latest.
+Migration `0007_cycle_run_terminal_immutability.py` adds a `BEFORE UPDATE`
+trigger on `cycle_runs` that raises if `OLD.status` is already terminal
+(`SUCCEEDED` or `FAILED`). The legitimate `RUNNING` -> terminal write remains
+allowed. A second UPDATE of a terminal row is rejected at the database, not
+only in Python. Retry/resume semantics were not added.
 
 #### Related ADRs
 
@@ -165,11 +165,9 @@ resume, or observability backfill). Roadmap Phase 10 at the latest.
 
 #### Related Tasks
 
-- S001-T011.
+- S001-T011 (discovery). S002-T004 (resolution).
 
 ---
-
-## 6. Resolved Problems
 
 ### PRB-001 - A local `.env` can leak into the unit suite and break `test_missing_password_is_rejected`
 
