@@ -82,9 +82,11 @@ def test_importing_extraction_does_not_load_infrastructure_at_runtime() -> None:
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def test_extraction_does_not_construct_event() -> None:
-    """The validator judges; Event construction is T008 and only on accepted."""
+def test_extraction_does_not_construct_event_outside_the_service() -> None:
+    """The validator judges; only the service constructs Event, on accepted."""
     for path in _extraction_module_files():
+        if path.name == "service.py":
+            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -98,15 +100,26 @@ def test_extraction_does_not_construct_event() -> None:
 
 
 def test_extraction_does_not_read_the_wall_clock() -> None:
-    forbidden_clock_names = {"now", "utcnow"}
+    """``clock.now()`` is injected; ``datetime.now()`` / ``utcnow()`` are not."""
     for path in _extraction_module_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            if isinstance(func, ast.Attribute) and func.attr in forbidden_clock_names:
+            if not isinstance(func, ast.Attribute):
+                continue
+            if func.attr not in {"now", "utcnow"}:
+                continue
+            if _is_datetime_clock_call(func):
                 raise AssertionError(
-                    f"{path} calls {func.attr}() at line {node.lineno}; "
-                    "extraction must not read the wall clock"
+                    f"{path} calls datetime.{func.attr}() at line {node.lineno}; "
+                    "extraction must use an injected Clock"
                 )
+
+
+def _is_datetime_clock_call(func: ast.Attribute) -> bool:
+    value = func.value
+    if isinstance(value, ast.Name) and value.id == "datetime":
+        return True
+    return isinstance(value, ast.Attribute) and value.attr == "datetime"
