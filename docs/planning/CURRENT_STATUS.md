@@ -9,21 +9,27 @@ task status lives in the sprint table (and in an Issues tracker once one exists)
 
 ```text
 Status Date:             2026-08-19
-Current Phase:           Sprint 001 closeout (Roadmap Phases 0-2)
+Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
+                         (one source adapter of the MVP set)
 Current Milestone:       MVP (Roadmap Phases 0-10)
 Implementation Status:   Full Sprint 001 delivered: toolchain through
                          WORKFLOWS.md (S001-T002..T014). No LLM code yet.
-Overall Status:          Approved - all Sprint 001 tasks done; sprint closeout
-Active Sprint:           001 - Foundation to first real document (Status: Approved)
-Last Completed Sprint:   none
-Next Planned Capability: After Sprint 001: remaining Phase 2 source adapters
-                         and Phase 3, the first LLM slice
+Overall Status:          Sprint 001 closed 2026-08-19; between sprints,
+                         awaiting Sprint 002 planning by `architect`
+Active Sprint:           none
+Last Completed Sprint:   001 - Foundation to first real document
+                         (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
+Next Planned Capability: Complete Roadmap Phase 2 (remaining source adapters)
+                         and open Phase 3, the first LLM slice
 ```
 
 ## 3. Current Objective
 
-Get from "everything is decided on paper" to "real documents from a live source
-are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
+Sprint 001's objective - get from "everything is decided on paper" to "real
+documents from a live source are in PostgreSQL" - is met. The next objective is
+to widen ingestion to the rest of the MVP sources and make the first LLM slice
+(event extraction) run against that real data, with the candidate/validation
+and audit machinery in place from the very first call.
 
 ## 4. Completed Capabilities
 
@@ -31,8 +37,10 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
 - Architecture: `ARCHITECTURE_FOUNDATIONS.md`, `DOMAIN_MODEL.md`,
   ADR-0001..ADR-0014 (all four previously blocking stack questions resolved,
   plus the pgvector amendment to ADR-0005).
-- Planning: `ROADMAP.md` (Phases 0-10), `PROJECT_MANAGEMENT.md`, `SPRINT_001.md`,
-  `S001_WAVE0_DECISIONS.md`.
+- Planning: `ROADMAP.md` (Phases 0-10), `PROJECT_MANAGEMENT.md`, `SPRINT_001.md`
+  (closed, with the sprint review in section 9), `S001_WAVE0_DECISIONS.md`,
+  and - created at Sprint 001 close - `PROBLEM_REGISTRY.md` and
+  `TECHNICAL_DEBT.md`.
 - Reference: `ARCHITECTURE_OVERVIEW.md`, `MODULE_MAP.md`, root `CLAUDE.md`.
 - Repository under git.
 - S001-T002: toolchain and dependency baseline; `scripts/check.py` runs
@@ -150,7 +158,9 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
 
 ## 5. Work in Progress
 
-None. Sprint 001 tasks T001-T014 are complete; sprint closeout is next.
+None. Sprint 001 is closed - its review, lessons, and follow-up are in
+`sprints/SPRINT_001.md` section 9. The next step is Sprint 002 planning by
+`architect`, which needs human approval before any implementation starts.
 
 ## 6. Blocked Work
 
@@ -162,7 +172,10 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
 
 ## 7. Open Critical Problems
 
-- None recorded.
+- None. `PROBLEM_REGISTRY.md` holds four open problems (PRB-001..PRB-004), all
+  MEDIUM or LOW; `TECHNICAL_DEBT.md` holds four accepted entries
+  (TD-001..TD-004), all MEDIUM or LOW. Nothing from Sprint 001 requires a
+  human CRITICAL/HIGH decision.
 
 ## 8. Open Decisions
 
@@ -173,6 +186,12 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
 | Retention policy for document bodies and LLM `raw_output` | Phase 10 | ADR-0005/ADR-0013 follow-up |
 | Monthly LLM cost ceiling | before Phase 3 spending grows | ADR-0010 follow-up |
 
+All four were re-checked at Sprint 001 close and are still genuinely open -
+none was resolved during the sprint, and none blocked a task. The embedding
+model source is now also the repayment trigger for TD-003 (the `vector(384)`
+placeholder), and the LLM cost ceiling is the one that becomes pressing first,
+since Phase 3 starts spending.
+
 ## 9. Known Risks
 
 - Phase 4 (narrative identity and candidate matching) remains the make-or-break
@@ -181,25 +200,29 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
   soon as ingestion is live.
 - Sprint 001 spans three roadmap phases; the hard out-of-scope lines (one
   adapter, no LLM, no UI) are what keep it bounded.
-- S001-T011 review follow-up (non-blocking): `cycle_runs.update()` has no
-  DB-level guard against re-updating an already-terminal row (inert today,
-  worth hardening later). The `Stage` callable signature was updated in
-  S001-T012 so ingest can record per-source outcomes.
-- Reuters and AP seed `feed_url` values are not live public feeds; a full
-  seed cycle records those sources failed and continues. Bloomberg Markets
-  is the live RSS source.
+- Registry-tracked from Sprint 001 close, with full context in
+  `PROBLEM_REGISTRY.md` and `TECHNICAL_DEBT.md`: the `.env` trap in the unit
+  suite (PRB-001), Reuters/AP seed feeds not being live (PRB-002), the
+  unenforced three-condition assignment rule (PRB-003), the missing
+  terminal-`CycleRun` guard (PRB-004), and TD-001..TD-004.
 
 ## 10. Next Planned Capability
 
-After Sprint 001: complete Roadmap Phase 2 (remaining source adapters) and open
-Phase 3, the first LLM slice - extraction, prompt versioning, the validation
-layer, and `LLMRun` recording.
+Complete Roadmap Phase 2 (the remaining MVP source adapters: Fed/FOMC, BLS,
+SEC EDGAR, and working newswire feeds - which also closes PRB-002) and open
+Roadmap Phase 3, the first LLM slice: event extraction with versioned prompts
+and output schemas, the deterministic validation layer (ADR-0002), and `LLMRun`
+recording on every material call (ADR-0007, ADR-0010), writing into the schema
+Sprint 001 built.
+
+This is direction, not a sprint plan. Scoping Sprint 002 is `architect`'s job
+and needs human approval before implementation begins.
 
 ## 11. Sprint Progress
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 14 / 14 |
+| 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
 
 ## 12. Update Rules
 

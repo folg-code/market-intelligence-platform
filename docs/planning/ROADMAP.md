@@ -57,7 +57,7 @@ MVP = Phases 0-10.
 
 ### Phase 0 - Governance and repository foundation
 
-Status: Not started
+Status: Complete (Sprint 001, closed 2026-08-19)
 
 #### Purpose
 
@@ -84,10 +84,15 @@ Fresh clone -> one documented command -> lint + types + tests green
 
 #### Completion Criteria
 
-- [ ] Repository under version control with `main` and the branch model in use
-- [ ] Four open-decision ADRs written and Accepted
-- [ ] `docs/reference/WORKFLOWS.md` and root `CLAUDE.md` exist
-- [ ] CI green on an empty-but-real test suite
+- [x] Repository under version control with `main` and the branch model in use
+      (`sprint/mvp-foundation` + `<prefix>/<slug>` working branches, PRs #1-#14)
+- [x] Four open-decision ADRs written and Accepted (ADR-0011 scheduler,
+      ADR-0012 frontend, ADR-0013 hosting, ADR-0010 LLM provider/model;
+      ADR-0014 added for pgvector)
+- [x] `docs/reference/WORKFLOWS.md` and root `CLAUDE.md` exist (S001-T014)
+- [x] CI green on an empty-but-real test suite - `.github/workflows/ci.yml`
+      runs lint + strict mypy + unit and integration tests against a live
+      pgvector service (S001-T013), with a red-then-green verification run
 
 #### Dependencies
 
@@ -107,7 +112,7 @@ Fresh clone -> one documented command -> lint + types + tests green
 
 ### Phase 1 - Domain model and storage
 
-Status: Not started
+Status: Complete (Sprint 001, closed 2026-08-19)
 
 #### Purpose
 
@@ -132,9 +137,16 @@ Migration -> seeded sources -> domain object round-trips through the store -> in
 
 #### Completion Criteria
 
-- [ ] All MVP entities persisted with migrations
-- [ ] Aggregate invariants from `DOMAIN_MODEL.md` section 5 covered by tests
-- [ ] Domain rules unit-testable without a database
+- [x] All MVP entities persisted with migrations (`0002`-`0005`; all 12
+      entities from `DOMAIN_MODEL.md` section 3, plus `cycle_runs` from `0006`)
+- [x] Aggregate invariants from `DOMAIN_MODEL.md` section 5 covered by tests,
+      with DB-level backstops where the invariant is permanent (immutability
+      and append-only triggers, uniqueness, EXCLUDE, CHECK constraints)
+- [x] Domain rules unit-testable without a database, enforced by the
+      no-infrastructure-import boundary test
+- Carried forward, not blocking: the three-condition assignment rule is
+  persisted but not enforced (PRB-003), and the identity-embedding dimension is
+  a placeholder (TD-003)
 
 #### Dependencies
 
@@ -153,7 +165,10 @@ Migration -> seeded sources -> domain object round-trips through the store -> in
 
 ### Phase 2 - Ingestion: Sources -> Documents
 
-Status: Not started
+Status: In progress - partially delivered by Sprint 001. The cycle, the
+adapter interface, dedupe, immutability, per-source failure isolation and the
+run record are all in place, but only ONE of the MVP source adapters exists
+(Bloomberg Markets RSS). Completing this phase is the remaining adapter work.
 
 #### Purpose
 
@@ -176,10 +191,13 @@ Scheduled tick -> fetch all sources -> normalize -> dedupe -> Documents in Postg
 
 #### Completion Criteria
 
-- [ ] Documents flowing automatically from all MVP sources
-- [ ] Re-running a cycle produces no duplicates
-- [ ] One source failing leaves the others unaffected and visible in the run
-      record
+- [ ] Documents flowing automatically from all MVP sources - **only Bloomberg
+      Markets RSS today**; Fed/FOMC, BLS, SEC EDGAR have no adapter, and the
+      Reuters/AP seed feeds are not live (PRB-002)
+- [x] Re-running a cycle produces no duplicates (natural-key unique constraint
+      + `ON CONFLICT DO NOTHING`, verified against a live database)
+- [x] One source failing leaves the others unaffected and visible in the run
+      record (`CycleRun.source_outcomes`; the cycle still succeeds)
 
 #### Dependencies
 
@@ -612,4 +630,7 @@ when evidence contradicts an assumption, and before planning the next phase.
   correcting first.
 - **Phases 0-2 could be one sprint** (foundation + first real data), which is
   the natural candidate for Sprint 001 once the roadmap and the four open ADRs
-  are approved.
+  are approved. This is what happened: Sprint 001 delivered Phases 0 and 1 in
+  full and Phase 2 in part (one adapter). The bounded scope held - the sprint
+  shipped all 14 planned tasks - but the "one adapter only" line is exactly
+  what kept Phase 2 open, so Phase 2 completion is the first thing after it.
