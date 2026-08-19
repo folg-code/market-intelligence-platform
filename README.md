@@ -18,7 +18,9 @@ Python 3.11+, Docker Desktop, then:
    `pre-commit install --hook-type pre-push`
 4. Copy `.env.example` to `.env` (`Copy-Item` on PowerShell, `cp` on bash).
    Host-side commands use `localhost:5433`; the `app` container still uses
-   `db:5432`.
+   `db:5432`. `CYCLE_EXTRACT_DOCUMENT_CAP` (default 20) caps how many
+   `COLLECTED` Documents one cycle extracts; it is not the monthly spend
+   ceiling.
 5. `docker compose up -d` then `alembic upgrade head`
 6. `python -m moj_projekt.persistence.seed_sources`
 7. `python -m moj_projekt.cycle.run_once`
@@ -49,9 +51,9 @@ mypy; push gets the unit suite.
 
 ## Status
 
-Sprint 001 ("Foundation to first real document") is in progress. See
+Sprint 002 ("The first LLM slice") is in progress. See
 `docs/planning/CURRENT_STATUS.md` for what is implemented today and
-`docs/planning/sprints/SPRINT_001.md` for the full task breakdown.
+`docs/planning/sprints/SPRINT_002.md` for the full task breakdown.
 
 ## More
 

@@ -13,7 +13,9 @@ Where PowerShell and bash differ, both forms are shown.
 - Docker Desktop (or equivalent) with Compose v2
 - Git
 
-No Anthropic API key is needed yet: Sprint 001 does not call an LLM.
+No Anthropic API key is needed yet: default `run_once` drives extract with
+`FakeLLMClient` until S002-T011. The monthly budget guard (T010) is not
+built.
 
 ## 2. Clone to a stored Document
 
@@ -58,6 +60,13 @@ local database. Host-side commands (migrations, seed, cycle, tests) use
 `app` container still talks to `db:5432` because `compose.yaml` overrides
 those two values.
 
+`CYCLE_EXTRACT_DOCUMENT_CAP` (default 20) bounds how many `COLLECTED`
+Documents one cycle sends through extract. It is a per-cycle blast-radius
+cap (ADR-0015), not the monthly spend ceiling — that guard is T010.
+Host-side `run_once` reads the value from `.env`. The `app` container
+does not currently receive this variable from compose, so the scheduled
+cycle uses the settings default of 20 unless compose is updated.
+
 ### 2.3 Compose, migrate, seed
 
 The app image does not contain `migrations/` or `alembic.ini`, so Alembic
@@ -101,6 +110,14 @@ live next to each entry in `persistence/seed_data/sources.py`. Expect
 ```text
 docker compose exec db psql -U moj_projekt -d moj_projekt -c "SELECT source_key, count(*) FROM documents GROUP BY source_key;"
 ```
+
+The extract stage then takes `COLLECTED` Documents, oldest first, up to
+`CYCLE_EXTRACT_DOCUMENT_CAP`. Default `run_once` uses `FakeLLMClient` with
+an empty `events` payload: that is a terminal `accepted` verdict, so
+processed Documents advance to `EVENTS_EXTRACTED` and an `LLMRun` is
+written, typically with zero Event rows. A second `run_once` immediately
+afterwards extracts nothing extra from those rows (empty queue: zero LLM
+calls). Real Anthropic output is T011.
 
 Re-running `run_once` is safe: Document dedupe is `ON CONFLICT DO NOTHING`,
 and seed is idempotent.
@@ -199,8 +216,9 @@ manual / CI.
 ## 7. Out of scope here
 
 No VPS deploy, backup/restore, or dashboard. No remaining source adapters
-and no LLM calls. Schema for those later pieces already exists; the
-commands above do not invoke them.
+and no live Anthropic calls (default extract uses `FakeLLMClient`). The
+monthly budget guard is not built. Schema for later pieces already exists;
+the commands above do not invoke Anthropic.
 
 ## 8. Update rule
 
