@@ -121,7 +121,6 @@ def _hard_errors_for_event(
     errors: list[ValidationError] = []
     errors.extend(_document_reference_errors(event, event_path))
     errors.extend(_occurred_at_errors(event, event_path, document, config))
-    errors.extend(_merged_facts_claims_errors(event, event_path))
     errors.extend(_forbidden_vocabulary_errors(event, event_path))
     errors.extend(_market_language_errors(event, event_path))
     errors.extend(_event_invariant_errors(event, event_path, document))
@@ -175,39 +174,6 @@ def _occurred_at_errors(
             json_path=path,
         )
     ]
-
-
-def _merged_facts_claims_errors(
-    event: Mapping[str, Any],
-    event_path: str,
-) -> list[ValidationError]:
-    facts = event.get("extracted_facts")
-    claims = event.get("source_claims")
-    if not isinstance(facts, list) or not isinstance(claims, list):
-        return []
-    fact_texts = {
-        item["text"]
-        for item in facts
-        if isinstance(item, dict) and isinstance(item.get("text"), str)
-    }
-    errors: list[ValidationError] = []
-    for item in claims:
-        if not isinstance(item, dict):
-            continue
-        text = item.get("text")
-        if isinstance(text, str) and text in fact_texts:
-            errors.append(
-                ValidationError(
-                    code=ValidationErrorCode.MERGED_FACTS_AND_CLAIMS,
-                    message=(
-                        f"extracted_facts and source_claims share text {text!r} "
-                        f"at {event_path}, which merges facts and claims "
-                        "(ADR-0008)"
-                    ),
-                    json_path=event_path,
-                )
-            )
-    return errors
 
 
 def _forbidden_vocabulary_errors(

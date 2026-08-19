@@ -223,34 +223,6 @@ def test_merge_field_is_rejected_as_merged_facts_and_claims_not_schema() -> None
     )
 
 
-def test_duplicate_fact_and_claim_text_is_rejected_as_merged_facts_and_claims() -> None:
-    shared = "The Federal Reserve left the policy rate unchanged."
-    result = _validate(
-        _raw(
-            [
-                _event(
-                    extracted_facts=[
-                        {"text": shared, "epistemic_category": "observed_fact"}
-                    ],
-                    source_claims=[
-                        {
-                            "text": shared,
-                            "epistemic_category": "source_claim",
-                            "attributed_to": "FOMC statement",
-                        }
-                    ],
-                )
-            ]
-        )
-    )
-
-    _assert_only_rule(
-        result,
-        ValidationErrorCode.MERGED_FACTS_AND_CLAIMS,
-        message_must_include="share text",
-    )
-
-
 @pytest.mark.parametrize("term", ["forecast", "prediction", "signal", "sentiment_score"])
 def test_forbidden_vocabulary_in_generated_text_is_rejected(term: str) -> None:
     result = _validate(_raw([_event(title=f"Federal Reserve {term} of an unchanged rate")]))

@@ -11,8 +11,9 @@ not here.
   and only on `accepted`.
 - Verdicts are `CandidateStatus`, never raw strings.
 - Thresholds come from `ValidationConfig`, not from literals in rule bodies.
-- Import schema artifacts from `moj_projekt.llm.artifacts`, never from
-  `moj_projekt.llm` (that package `__init__` imports the Anthropic client).
+- Prefer `moj_projekt.llm.artifacts` for schema loading. `moj_projekt.llm`
+  lazy-loads `AnthropicClient`, but this package still must not import
+  the Anthropic SDK (enforced by the boundary test).
 
 ## Gotchas
 
@@ -20,7 +21,8 @@ not here.
   those fail the Event-invariant rule, not schema v1.
 - A known merge field (`facts_and_claims` and siblings) is reported as
   `merged_facts_and_claims`, not as a generic schema violation, so the
-  two hard rules stay distinguishable.
+  two hard rules stay distinguishable. Identical wording in both
+  `extracted_facts` and `source_claims` is not a merge (ADR-0008).
 - `proposed` means schema-valid but below auto-accept confidence. Hard-rule
   failures are always `rejected`, even when confidence is also low.
 - Empty `events` is `accepted` (a document with no economic development).
