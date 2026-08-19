@@ -158,8 +158,10 @@ def test_fixture_feed_creates_documents_and_re_run_inserts_none(
 
 def test_seeded_registry_cycle_records_no_source_failures(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    seed_sources(migrated_session)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seed_sources(uow.sources)
     payload = (_FIXTURES / "sample_feed.xml").read_bytes()
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -170,7 +172,7 @@ def test_seeded_registry_cycle_records_no_source_failures(
     adapter = _adapter(_FixedClock(), httpx.MockTransport(handler))
     try:
         result = run_once(
-            migrated_session,
+            engine,
             clock=_FixedClock(),
             adapters={RSS_SOURCE_TYPE: adapter},
         )
@@ -184,7 +186,8 @@ def test_seeded_registry_cycle_records_no_source_failures(
     }
     assert failed == set()
     assert set(result.source_outcomes) == {"bloomberg_markets"}
-    active = SqlAlchemySourceRepository(migrated_session).list_active()
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        active = uow.sources.list_active()
     assert {source.key for source in active} == {"bloomberg_markets"}
     assert _document_count(migrated_session) == 2
 
