@@ -25,8 +25,8 @@ Python 3.11+, Docker Desktop, then:
 
 `GET http://localhost:8000/health` should report `database: ok` and
 `pgvector: available`. The cycle writes Documents from the live Bloomberg
-Markets RSS feed; Reuters/AP seed URLs fail in isolation and do not fail
-the cycle.
+Markets RSS feed; other seeded sources are inactive until they have a
+working adapter and feed.
 
 ## Checks
 

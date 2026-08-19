@@ -53,9 +53,18 @@ def test_seed_sources_have_pairwise_distinct_publishers() -> None:
     assert len(publishers) == len(set(publishers))
 
 
-def test_seed_sources_are_active_by_default() -> None:
-    for source in SEED_SOURCES:
-        assert source.active is True
+def test_only_sources_with_adapter_and_live_feed_are_seeded_active() -> None:
+    active_keys = {source.key for source in SEED_SOURCES if source.active}
+    inactive_keys = {source.key for source in SEED_SOURCES if not source.active}
+
+    assert active_keys == {"bloomberg_markets"}
+    assert inactive_keys == {
+        "fed_fomc",
+        "bls",
+        "sec_edgar",
+        "reuters_markets",
+        "ap_news",
+    }
 
 
 def test_bloomberg_seed_uses_the_public_markets_rss_url() -> None:

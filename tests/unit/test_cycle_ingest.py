@@ -21,6 +21,7 @@ from moj_projekt.domain.enums import SourceTier
 from moj_projekt.domain.repositories import UnitOfWork
 from moj_projekt.domain.source import Source
 from moj_projekt.ingestion.adapter import SourceFetchError
+from moj_projekt.persistence.seed_data.sources import SEED_SOURCES
 
 _T0 = datetime(2026, 8, 18, 12, 0, 0, tzinfo=UTC)
 _PUBLISHED = datetime(2026, 8, 17, 14, 0, tzinfo=UTC)
@@ -270,6 +271,25 @@ def test_immediate_re_run_creates_zero_new_documents() -> None:
     assert first.status is CycleRunStatus.SUCCEEDED
     assert second.status is CycleRunStatus.SUCCEEDED
     assert len(repo.documents) == 1
+
+
+def test_seeded_registry_records_no_expected_source_failures() -> None:
+    class _FailUnlessBloomberg:
+        def fetch_documents(self, source: Source) -> list[Document]:
+            if source.key != "bloomberg_markets":
+                raise SourceFetchError(f"HTTP 404 fetching {source.key}")
+            return []
+
+    result, repo = _run_ingest(
+        sources=SEED_SOURCES,
+        adapters={"rss": _FailUnlessBloomberg()},
+    )
+
+    failed = {key for key, outcome in result.source_outcomes.items() if not outcome.succeeded}
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert failed == set()
+    assert set(result.source_outcomes) == {"bloomberg_markets"}
+    assert repo.documents == []
 
 
 def test_sources_without_an_adapter_are_skipped() -> None:

@@ -16,9 +16,23 @@ Tier 1 (``SourceTier.PRIMARY``): the three official/primary MVP sources named
 in `docs/planning/sprints/SPRINT_001.md` section 5.1 (S001-T010) - Fed/FOMC,
 BLS, SEC EDGAR. Tier 2 (``SourceTier.PROFESSIONAL``): three established,
 independently-owned newswires. RSS ``feed_url`` values are data for the
-ingest adapter (S001-T012), not hardcoded in adapter code. Bloomberg Markets
-uses a live public RSS URL; Reuters and AP entries keep structurally-real
-placeholders until those outlets expose a public feed again.
+ingest adapter (S001-T012), not hardcoded in adapter code.
+
+Active flag (S002-T005, PRB-002, D-S002-04 clause 14): a source is seeded
+``active=True`` only when it has both a working adapter and a live feed, so a
+clean cycle over this registry records no expected per-source failures.
+
+- ``fed_fomc``: ``active=False`` - ``source_type=official_api``, no adapter yet.
+- ``bls``: ``active=False`` - ``source_type=official_api``, no adapter yet.
+- ``sec_edgar``: ``active=False`` - ``source_type=official_api``, no adapter yet.
+- ``reuters_markets``: ``active=False`` - seeded URL returned HTTP 404 (HTML,
+  not RSS) on 2026-08-19; ``feeds.reuters.com`` does not resolve; no
+  replacement public RSS was found.
+- ``ap_news``: ``active=False`` - ``https://apnews.com/rss`` returned HTTP 404
+  (HTML, not RSS) on 2026-08-19; no replacement public RSS was found.
+- ``bloomberg_markets``: ``active=True`` -
+  ``https://feeds.bloomberg.com/markets/news.rss`` returned a live RSS
+  document on 2026-08-19.
 
 """
 
@@ -37,6 +51,7 @@ SEED_SOURCES: tuple[Source, ...] = (
         tier=SourceTier.PRIMARY,
         publisher="Federal Reserve",
         endpoint_config={"base_url": "https://www.federalreserve.gov"},
+        active=False,
     ),
     Source(
         key="bls",
@@ -45,6 +60,7 @@ SEED_SOURCES: tuple[Source, ...] = (
         tier=SourceTier.PRIMARY,
         publisher="U.S. Bureau of Labor Statistics",
         endpoint_config={"base_url": "https://www.bls.gov"},
+        active=False,
     ),
     Source(
         key="sec_edgar",
@@ -53,6 +69,7 @@ SEED_SOURCES: tuple[Source, ...] = (
         tier=SourceTier.PRIMARY,
         publisher="U.S. Securities and Exchange Commission",
         endpoint_config={"base_url": "https://www.sec.gov/cgi-bin/browse-edgar"},
+        active=False,
     ),
     Source(
         key="reuters_markets",
@@ -61,6 +78,7 @@ SEED_SOURCES: tuple[Source, ...] = (
         tier=SourceTier.PROFESSIONAL,
         publisher="Reuters",
         endpoint_config={"feed_url": "https://www.reutersagency.com/feed/?best-topics=markets"},
+        active=False,
     ),
     Source(
         key="ap_news",
@@ -69,6 +87,7 @@ SEED_SOURCES: tuple[Source, ...] = (
         tier=SourceTier.PROFESSIONAL,
         publisher="Associated Press",
         endpoint_config={"feed_url": "https://apnews.com/rss"},
+        active=False,
     ),
     Source(
         key="bloomberg_markets",

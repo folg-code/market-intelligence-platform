@@ -56,58 +56,6 @@ Last Updated:
 
 ## 5. Active Problems
 
-### PRB-002 - Two seeded Tier 2 sources have no live feed, so every cycle records them as failed
-
-```text
-Status:       OPEN
-Severity:     MEDIUM
-Domain:       Ingestion / source registry
-Owner:        unassigned
-Discovered:   2026-08-18 (Sprint 001, S001-T012)
-Last Updated: 2026-08-19
-```
-
-#### Description
-
-The Source registry seeds six sources, but only Bloomberg Markets has a working
-public RSS feed behind it. The Reuters and Associated Press `feed_url` values in
-the seed data are not live public feeds, and the Tier 1 sources (Fed/FOMC, BLS,
-SEC EDGAR) have no adapter at all yet. Running a full cycle therefore always
-produces per-source failures alongside the successful Bloomberg ingest.
-
-#### Evidence
-
-- `src/moj_projekt/persistence/seed_data/sources.py` (six seeded sources).
-- `src/moj_projekt/ingestion/rss.py` - one concrete adapter.
-- `CURRENT_STATUS.md` section 9 already records this as a known risk.
-
-#### Impact
-
-Failure isolation works as designed - the cycle still succeeds - but the
-`CycleRun.source_outcomes` baseline is permanently noisy, which erodes the
-signal value of "a source failed" once real drift starts happening. It also
-means the seed registry currently overstates what the system can actually
-ingest.
-
-#### Possible Directions
-
-- Build the remaining adapters (Roadmap Phase 2 completion) and correct the
-  feed URLs at the same time.
-- Or mark sources without an adapter as inactive in the registry until an
-  adapter exists, so the cycle does not attempt them.
-
-#### Decision or Resolution Criteria
-
-Resolved when a clean cycle over the seeded registry produces no expected
-failures - every seeded source either ingests successfully or is explicitly
-inactive.
-
-#### Related Tasks
-
-- S001-T010 (seed), S001-T012 (first adapter). Next: Roadmap Phase 2 completion.
-
----
-
 ### PRB-003 - The three-condition narrative assignment rule is not enforced anywhere
 
 ```text
@@ -262,6 +210,57 @@ load-bearing for this unit test.
 #### Related Tasks
 
 - S001-T003 (settings), S001-T013 (CI workaround); closed by S002-T003.
+
+---
+
+### PRB-002 - Two seeded Tier 2 sources have no live feed, so every cycle records them as failed
+
+```text
+Status:       RESOLVED (2026-08-19)
+Severity:     MEDIUM
+Domain:       Ingestion / source registry
+Owner:        unassigned
+Discovered:   2026-08-18 (Sprint 001, S001-T012)
+Last Updated: 2026-08-19
+```
+
+#### Description
+
+The Source registry seeds six sources, but only Bloomberg Markets has a working
+public RSS feed behind it. The Reuters and Associated Press `feed_url` values in
+the seed data are not live public feeds, and the Tier 1 sources (Fed/FOMC, BLS,
+SEC EDGAR) have no adapter at all yet. Running a full cycle therefore always
+produces per-source failures alongside the successful Bloomberg ingest.
+
+#### Resolution
+
+Honesty, not new adapters (D-S002-04 clause 14). Sources without an adapter
+(`fed_fomc`, `bls`, `sec_edgar`) or without a live public RSS feed
+(`reuters_markets`, `ap_news` - both URLs returned HTTP 404 on 2026-08-19)
+are seeded `active=False`. Bloomberg Markets stays active. A clean cycle
+over a freshly seeded registry therefore records no expected per-source
+failures. Reasons live next to each entry in
+`src/moj_projekt/persistence/seed_data/sources.py`.
+
+#### Remaining gap
+
+`SourceRepository.add` is `ON CONFLICT DO NOTHING`. Re-seeding a fresh
+database is stable, including `active`. Re-seeding an existing registry that
+still has those keys `active=True` will not flip the flag; that needs a
+manual change. `add()`'s conflict clause is not widened here.
+
+Fed/FOMC, BLS, and SEC adapters, and real Reuters/AP public feeds, remain
+Roadmap Phase 2 work.
+
+#### Related Documents
+
+- `src/moj_projekt/persistence/seed_data/sources.py`
+- `src/moj_projekt/persistence/seed_sources.py`
+- `docs/planning/sprints/S002_WAVE0_DECISIONS.md` D-S002-04 clause 14
+
+#### Related Tasks
+
+- S001-T010 (seed), S001-T012 (first adapter), S002-T005 (registry honesty).
 
 ---
 

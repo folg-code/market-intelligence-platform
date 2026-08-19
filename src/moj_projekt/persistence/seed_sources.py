@@ -13,9 +13,16 @@ declarative sources in
 :mod:`moj_projekt.persistence.seed_data.sources`, calling
 ``SourceRepository.add()`` for each. That method already performs
 ``INSERT ... ON CONFLICT DO NOTHING`` keyed on ``Source.key``
-(:class:`~moj_projekt.persistence.source_repository.SqlAlchemySourceRepository`),
-so running this command any number of times leaves the registry unchanged
-after the first run - no additional idempotency logic is needed here.
+(:class:`~moj_projekt.persistence.source_repository.SqlAlchemySourceRepository`).
+
+On a fresh database, running this command twice is stable, including
+``active``: the first insert writes the seed flag and the second is a
+no-op that leaves the stored row unchanged.
+
+A re-seed onto an existing registry does **not** flip ``active`` (or any
+other column) of an already-present key. If a row was previously seeded
+``active=True``, deactivate it with a manual flag change. This command
+does not widen ``add()``'s conflict clause.
 
 The CLI opens one unit of work around the whole seed so the registry
 write is a single commit.
@@ -55,7 +62,10 @@ def main() -> int:
         engine.dispose()
 
     for source in seeded:
-        print(f"seeded: {source.key} (tier={source.tier.name}, publisher={source.publisher})")
+        print(
+            f"seeded: {source.key} (tier={source.tier.name}, "
+            f"publisher={source.publisher}, active={source.active})"
+        )
     print(f"{len(seeded)} source(s) in registry after seed.")
     return 0
 
