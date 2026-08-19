@@ -15,8 +15,9 @@ APScheduler, is invocable directly via `python -m moj_projekt.cycle.run_once`,
 and persists real Documents from one live RSS source (Bloomberg Markets) with
 per-source failure isolation. Every MVP entity in `DOMAIN_MODEL.md` section 3
 has a table. There are no LLM calls and no dashboard. The deterministic
-extraction validator (`extraction/`) exists as a library and is not yet
-wired into the cycle (S002-T008).
+extraction validator (`extraction/`) exists as a library. Persistence and
+LLM calls land in S002-T008; the cycle extract stage stays passthrough
+until S002-T009.
 
 How to run it: `docs/reference/WORKFLOWS.md`.
 
