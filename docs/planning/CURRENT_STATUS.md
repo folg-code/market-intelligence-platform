@@ -13,17 +13,18 @@ Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
                          (one source adapter of the MVP set); Phase 3 planned
                          as Sprint 002
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Sprint 001 complete. Sprint 002 Wave 1 landed
-                         (S002-T002..T006): unit of work, env-isolated unit
+Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-2 landed
+                         (S002-T002..T007): unit of work, env-isolated unit
                          tests, terminal CycleRun trigger, honest seed
-                         registry, llm/ client port with FakeLLMClient.
-Overall Status:          Sprint 002 in progress - Wave 1 merged (PRs #16-#20).
-                         Next: S002-T007 (deterministic extraction validator).
+                         registry, llm/ client port with FakeLLMClient,
+                         and the deterministic extraction validator.
+Overall Status:          Sprint 002 in progress - Waves 1-2 merged
+                         (PRs #16-#21). Next: S002-T008 (extraction service).
 Active Sprint:           002 - The first LLM slice (Status: Approved)
 Last Completed Sprint:   001 - Foundation to first real document
                          (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
-Next Planned Capability: S002-T007 - deterministic validator
-                         (accepted / proposed / rejected), no infrastructure
+Next Planned Capability: S002-T008 - extraction service writing Event
+                         + LLMRun in one transaction, driven by FakeLLMClient
 ```
 
 ## 3. Current Objective
@@ -150,10 +151,16 @@ machinery is the real unknown.
   manual flag flip (`ON CONFLICT DO NOTHING`).
 - S002-T006: `llm/` port, FakeLLMClient, versioned prompt/schema v1, pinned
   `claude-haiku-4-5-20251001` (PR #18). Real API is T011.
+- S002-T007: `extraction/` parser + deterministic validator producing
+  `accepted` / `proposed` / `rejected` (ADR-0002), with no model, HTTP, or
+  database (PR #21). Duplicate fact/claim *text* is not a merge (ADR-0008:
+  merge = one field/list); `facts_and_claims` field remapping remains.
+  `llm/` lazy-loads Anthropic so importing extraction does not load the SDK.
 
 ## 5. Work in Progress
 
-- S002-T007 (deterministic extraction validator) is next; depends on T006.
+- S002-T008 (extraction service: Event + `LLMRun` in one transaction) is next;
+  depends on T002, T006, T007.
 
 ## 6. Blocked Work
 
@@ -215,7 +222,7 @@ embedding-model-source decision.
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
 | 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
-| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 6 / 12 |
+| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 7 / 12 |
 
 ## 12. Update Rules
 
