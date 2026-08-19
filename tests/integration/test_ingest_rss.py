@@ -156,6 +156,42 @@ def test_fixture_feed_creates_documents_and_re_run_inserts_none(
     assert row.content
 
 
+def test_seeded_registry_cycle_records_no_source_failures(
+    migrated_session: Session,
+    engine: Engine,
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seed_sources(uow.sources)
+    payload = (_FIXTURES / "sample_feed.xml").read_bytes()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) != _BLOOMBERG_FEED_URL:
+            return httpx.Response(404, content=b"not a live public feed")
+        return httpx.Response(200, content=payload)
+
+    adapter = _adapter(_FixedClock(), httpx.MockTransport(handler))
+    try:
+        result = run_once(
+            engine,
+            clock=_FixedClock(),
+            adapters={RSS_SOURCE_TYPE: adapter},
+        )
+    finally:
+        adapter.close()
+
+    assert result is not None
+    assert result.status is CycleRunStatus.SUCCEEDED
+    failed = {
+        key for key, outcome in result.source_outcomes.items() if not outcome.succeeded
+    }
+    assert failed == set()
+    assert set(result.source_outcomes) == {"bloomberg_markets"}
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        active = uow.sources.list_active()
+    assert {source.key for source in active} == {"bloomberg_markets"}
+    assert _document_count(migrated_session) == 2
+
+
 @pytest.mark.parametrize(
     ("status_code", "body", "reason"),
     [
@@ -217,6 +253,10 @@ def test_live_bloomberg_feed_creates_documents(
     assert second.status is CycleRunStatus.SUCCEEDED
     bloomberg = first.source_outcomes["bloomberg_markets"]
     assert bloomberg.succeeded is True, bloomberg.failure_reason
+    failed = {
+        key for key, outcome in first.source_outcomes.items() if not outcome.succeeded
+    }
+    assert failed == set()
     assert count_after_first > 0
     assert count_after_second == count_after_first
 

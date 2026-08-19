@@ -91,11 +91,12 @@ A healthy response is `status=ok`, `database=ok`, `pgvector=available`.
 python -m moj_projekt.cycle.run_once
 ```
 
-Only `source_type=rss` has an adapter this sprint. Bloomberg Markets is
-the live public feed; Reuters and AP seed URLs are not live public feeds
-and are recorded as per-source failures without failing the cycle. Tier 1
-official sources (Fed/FOMC, BLS, SEC) are skipped until their adapters
-exist. Expect `bloomberg_markets: ok` and at least one `documents` row:
+Only `source_type=rss` has an adapter this sprint, and only Bloomberg
+Markets is seeded `active=True` (live public RSS, verified). Reuters, AP,
+and the Tier 1 official sources (Fed/FOMC, BLS, SEC) are seeded
+`active=False` until they have both an adapter and a live feed; reasons
+live next to each entry in `persistence/seed_data/sources.py`. Expect
+`bloomberg_markets: ok` and at least one `documents` row:
 
 ```text
 docker compose exec db psql -U moj_projekt -d moj_projekt -c "SELECT source_key, count(*) FROM documents GROUP BY source_key;"
@@ -181,8 +182,9 @@ manual / CI.
   `docker compose ps` shows `db` healthy on `0.0.0.0:5433->5432/tcp`.
 - **`/health` is unreachable.** The `app` container is what listens on
   8000. `docker compose up -d` must include `app`, not only `db`.
-- **Cycle prints Reuters/AP failures.** Expected this sprint; Bloomberg
-  should still succeed and write Documents.
+- **Cycle records a source failure.** After S002-T005 a clean seeded
+  registry should not fail Reuters/AP (those sources are inactive). A
+  recorded failure now means a live adapter/feed problem.
 - **`run_once` prints `cycle skipped`.** Another CycleRun is `RUNNING`
   (the scheduler tick, or a previous cycle). Wait and retry.
 - **Integration tests fail with a connection error.** Start `db`, apply

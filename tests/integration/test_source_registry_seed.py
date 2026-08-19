@@ -77,8 +77,34 @@ def test_seeding_twice_leaves_the_registry_unchanged(
     assert {source.key for source in first_run} == {
         source.key for source in second_run
     }
+    assert [(source.key, source.active) for source in first_run] == [
+        (source.key, source.active) for source in second_run
+    ]
+    assert [(source.key, source.active) for source in first_run] == [
+        (source.key, source.active) for source in SEED_SOURCES
+    ]
     count = migrated_session.execute(text("SELECT count(*) FROM sources")).scalar_one()
     assert count == len(SEED_SOURCES)
+
+
+def test_seeded_active_split_matches_working_adapter_and_feed(
+    migrated_session: Session,
+    engine: Engine,
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seed_sources(uow.sources)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seed_sources(uow.sources)
+        active = uow.sources.list_active()
+
+    expected_active = {source.key for source in SEED_SOURCES if source.active}
+    assert {source.key for source in active} == expected_active
+    assert expected_active == {"bloomberg_markets"}
+    stored_active = {
+        row.key: row.active
+        for row in migrated_session.execute(text("SELECT key, active FROM sources")).all()
+    }
+    assert stored_active == {source.key: source.active for source in SEED_SOURCES}
 
 
 def test_every_seeded_source_has_one_tier_and_a_publisher(
