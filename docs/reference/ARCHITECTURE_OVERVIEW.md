@@ -4,7 +4,7 @@ Living document - describes the system as it currently is (and, where marked,
 what is planned but not yet built). No approval required; update it whenever a
 component is added, removed, or changed.
 
-Last updated: 2026-08-19 (S002-T002 unit of work on `sprint/first-llm-slice`)
+Last updated: 2026-08-19 (S002-T007 extraction validator on `sprint/first-llm-slice`)
 
 ## 1. Current state
 
@@ -14,7 +14,9 @@ plus compose, migrations, and seed yields a running `app` + `db` stack.
 APScheduler, is invocable directly via `python -m moj_projekt.cycle.run_once`,
 and persists real Documents from one live RSS source (Bloomberg Markets) with
 per-source failure isolation. Every MVP entity in `DOMAIN_MODEL.md` section 3
-has a table. There are no LLM calls and no dashboard.
+has a table. There are no LLM calls and no dashboard. The deterministic
+extraction validator (`extraction/`) exists as a library and is not yet
+wired into the cycle (S002-T008).
 
 How to run it: `docs/reference/WORKFLOWS.md`.
 
@@ -31,6 +33,7 @@ How to run it: `docs/reference/WORKFLOWS.md`.
 | Source registry seed | implemented - S001-T010 | Idempotent six-source MVP registry (three Tier 1 official, three Tier 2 professional) |
 | Ingestion adapters | implemented for one RSS source - S001-T012 | Fetch, normalize, deduplicate source content into Documents. Remaining adapters (Fed/FOMC, BLS, SEC, further news) are Sprint 002 |
 | Processing cycle | implemented - S001-T011/T012 | Ordered stages: ingest is wired; extract, narratives, evidence, state, alerts are passthrough |
+| Extraction validator | implemented - S002-T007 | Parser + deterministic rules producing `accepted` / `proposed` / `rejected` (ADR-0002). No model, HTTP, or database. Not wired into the cycle yet |
 | Anthropic Claude API (external) | not yet used - Phase 3 | Tiered LLM calls (Haiku/Sonnet/Opus) behind the validation layer |
 | Embedding model source (external or local) | **undecided** - ADR-0014 follow-up | Produces narrative identity embeddings for candidate retrieval. The storage column exists (`narratives.identity_embedding`, `vector(384)`, added S001-T008) but 384 is only a documented placeholder dimension - which model actually produces the embeddings is still an open decision (see `docs/planning/CURRENT_STATUS.md` "Open Decisions"); changing it later is a migration plus a re-embedding pass, not data loss, since the embedding is derived data, never identity |
 | Dashboard (Jinja2 + HTMX) | planned - Phase 7 | Brief, active narratives, instrument exposure, alert feed |
