@@ -136,6 +136,7 @@ python scripts/check.py
 
 That is the same order CI uses for lint and type-check. Default `pytest`
 (and therefore `scripts/check.py`) excludes the `integration` marker.
+Unit tests autouse-clear ambient `POSTGRES_*` (shell export or a pytest dotenv plugin loading `.env`); integration tests still read those variables.
 
 On-demand hook run (same commit-stage checks as a commit, against every
 file):
@@ -165,9 +166,9 @@ python -m pytest -m network
 
 CI is `.github/workflows/ci.yml`. It runs on every push and pull request
 into `main` and `sprint/**`: ruff, strict mypy, then unit + integration
-against a `pgvector/pgvector:pg16` service. It writes a `.env` (not
-job-level `POSTGRES_PASSWORD`, which would break a unit test that asserts
-a missing password) and runs `pytest -o addopts="" -m "not network"`.
+against a `pgvector/pgvector:pg16` service. It writes a `.env` for Alembic
+and integration tests (the `.env`-not-job-`env:` shape is no longer
+load-bearing for unit-test isolation) and runs `pytest -o addopts="" -m "not network"`.
 
 Local pre-commit is the subset that does not need a database: commit gets
 hygiene + ruff + mypy; push gets the unit suite. Integration stays

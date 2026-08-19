@@ -56,80 +56,6 @@ Last Updated:
 
 ## 5. Active Problems
 
-### PRB-001 - A local `.env` can leak into the unit suite and break `test_missing_password_is_rejected`
-
-```text
-Status:       OPEN
-Severity:     MEDIUM
-Domain:       Developer environment / test isolation
-Owner:        unassigned
-Discovered:   2026-08-18 (Sprint 001, hit repeatedly during T007, T008, T009)
-Last Updated: 2026-08-19
-```
-
-#### Description
-
-A `.env` file is required locally to run integration tests against the compose
-database. On developer machines where a pytest dotenv plugin is installed
-(globally or in the active interpreter), that `.env` is loaded into the process
-environment before tests run. `tests/unit/test_settings.py::test_missing_password_is_rejected`
-then fails: it constructs `Settings(_env_file=None)` expecting a
-`ValidationError` for the missing password, but `POSTGRES_PASSWORD` is now a
-real environment variable, so `Settings` validates successfully.
-
-`_env_file=None` defends only against pydantic-settings reading the file - it
-cannot defend against the value already being in `os.environ`.
-
-#### Evidence
-
-- `src/moj_projekt/config/settings.py`: `postgres_password` has no default;
-  `model_config = SettingsConfigDict(env_file=".env", ...)`.
-- `tests/unit/test_settings.py:22-23`: the test relies on the absence of
-  `POSTGRES_PASSWORD` from the environment; it does not `monkeypatch.delenv`
-  it, unlike the sibling test which does `delenv("POSTGRES_HOST")`.
-- The same class of trap already forced a workaround in CI: S001-T013 supplies
-  credentials to the test job by writing an `.env` file rather than using
-  job-level `env:` vars, precisely because a literal `POSTGRES_PASSWORD`
-  environment variable makes this test fail
-  (`.github/workflows/ci.yml`; `CURRENT_STATUS.md` section 4, S001-T013).
-- **Not reproducible on this machine as of 2026-08-19**: the project venv has
-  only `python-dotenv` (a pydantic-settings dependency, not a pytest plugin),
-  and the user-global `pytest_dotenv` install is an empty directory, so the
-  plugin does not load and `pytest tests/unit/test_settings.py` is green. The
-  failure mode is environment-dependent, which is exactly what makes it a trap.
-
-#### Impact
-
-A newcomer following `WORKFLOWS.md` (copy `.env.example` to `.env`, then run
-the checks) can see a red unit suite that has nothing to do with their change,
-and no documentation explains it. Time was lost to this three times in one
-sprint. No production impact.
-
-#### Possible Directions
-
-- Make the test environment-proof: `monkeypatch.delenv("POSTGRES_PASSWORD",
-  raising=False)` inside the test, matching what the sibling test already does
-  for `POSTGRES_HOST`.
-- Pin the test suite's environment explicitly (an `autouse` fixture in a
-  `conftest.py` that clears `POSTGRES_*` for unit tests) - there is currently
-  no `conftest.py` in the repo at all.
-- At minimum, document the trap in `WORKFLOWS.md`.
-
-#### Decision or Resolution Criteria
-
-Resolved when the unit suite passes regardless of what is in `.env` or in the
-ambient environment, on a machine with a dotenv pytest plugin installed.
-
-#### Related Documents
-
-- `docs/reference/WORKFLOWS.md`, `.env.example`, `.github/workflows/ci.yml`
-
-#### Related Tasks
-
-- S001-T003 (settings), S001-T013 (CI workaround); surfaced in T007-T009.
-
----
-
 ### PRB-002 - Two seeded Tier 2 sources have no live feed, so every cycle records them as failed
 
 ```text
@@ -296,6 +222,48 @@ resume, or observability backfill). Roadmap Phase 10 at the latest.
 ---
 
 ## 6. Resolved Problems
+
+### PRB-001 - A local `.env` can leak into the unit suite and break `test_missing_password_is_rejected`
+
+```text
+Status:       RESOLVED (2026-08-19)
+Severity:     MEDIUM
+Domain:       Developer environment / test isolation
+Owner:        unassigned
+Discovered:   2026-08-18 (Sprint 001, hit repeatedly during T007, T008, T009)
+Last Updated: 2026-08-19
+```
+
+#### Description
+
+A `.env` file is required locally to run integration tests against the compose
+database. On developer machines where a pytest dotenv plugin is installed
+(globally or in the active interpreter), that `.env` is loaded into the process
+environment before tests run. `tests/unit/test_settings.py::test_missing_password_is_rejected`
+then failed: it constructed `Settings(_env_file=None)` expecting a
+`ValidationError` for the missing password, but `POSTGRES_PASSWORD` was already
+in `os.environ`, so `Settings` validated successfully. `_env_file=None` defends
+only against pydantic-settings reading the file.
+
+#### Resolution
+
+S002-T003: `test_missing_password_is_rejected` now `monkeypatch.delenv`s
+`POSTGRES_PASSWORD` (matching the sibling HOST test). `tests/conftest.py`
+autouse-clears every `POSTGRES_*` variable for unit tests (skips
+`integration`-marked tests and anything under `tests/integration/`);
+integration tests still see the ambient environment. The trap is noted in
+`WORKFLOWS.md`. The CI `.env`-file workaround remains but is no longer
+load-bearing for this unit test.
+
+#### Related Documents
+
+- `docs/reference/WORKFLOWS.md`, `.env.example`, `.github/workflows/ci.yml`
+
+#### Related Tasks
+
+- S001-T003 (settings), S001-T013 (CI workaround); closed by S002-T003.
+
+---
 
 ### PRB-005 - The planning registries did not exist while agents were told to use them
 

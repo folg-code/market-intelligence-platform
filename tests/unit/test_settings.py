@@ -18,7 +18,8 @@ def test_database_url_is_built_from_components(monkeypatch: pytest.MonkeyPatch) 
     assert settings.database_url == "postgresql+psycopg://moj_projekt:secret@db:5432/moj_projekt"
 
 
-def test_missing_password_is_rejected() -> None:
+def test_missing_password_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)  # type: ignore[call-arg]
 

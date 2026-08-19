@@ -74,14 +74,12 @@ jobs:
       - name: Install project (dev extras)
         run: pip install -e ".[dev]"
 
-      # A `.env` file - not job-level `env:` vars - is deliberately used to
-      # supply the DB credentials: `Settings` reads `POSTGRES_PASSWORD` from
-      # `.env` without it ever landing in the process environment, which is
-      # exactly what tests/unit/test_settings.py::test_missing_password_is_rejected
-      # (constructed with `_env_file=None`) requires to still raise when no
-      # password is supplied. A literal `POSTGRES_PASSWORD` env var at the
-      # job or step level would make that unit test fail here even though it
-      # never touches the database.
+      # Host-side credentials are still supplied via a `.env` file (the same
+      # shape as local compose) so Alembic and integration tests can reach
+      # the service container. Unit tests now clear ambient POSTGRES_*
+      # themselves (tests/conftest.py), so writing `.env` rather than using
+      # job-level `env:` is no longer load-bearing for
+      # test_missing_password_is_rejected.
       - name: Write .env for host-side access to the service container
         run: |
           cat <<'EOF' > .env
