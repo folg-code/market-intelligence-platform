@@ -5,13 +5,69 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "moj-projekt"
 version = "0.1.0"
-description = ""
+description = "Market Intelligence Platform - evidence-backed market narrative intelligence."
 requires-python = ">=3.11"
 readme = "README.md"
-dependencies = []
+dependencies = [
+    # API framework + ASGI server (ADR-0005, ADR-0013)
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    # Single PostgreSQL store, migrations, pgvector (ADR-0005, ADR-0013, ADR-0014)
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "psycopg[binary]>=3.1,<4.0",
+    "pgvector>=0.3,<1.0",
+    # LLM provider (ADR-0010)
+    "anthropic>=0.40,<1.0",
+    # In-process scheduler for the 5-minute cycle, no broker/worker (ADR-0011)
+    "apscheduler>=3.10,<4.0",
+    # Typed settings and schema validation at boundaries (ADR-0013; Foundations principle 2)
+    "pydantic>=2.5,<3.0",
+    "pydantic-settings>=2.2,<3.0",
+    # HTTP pull from external sources on the 5-minute cadence (ADR-0004; Foundations section 8)
+    "httpx>=0.27,<1.0",
+    # RSS/Atom parsing for the first source adapter (ADR-0004; DOMAIN_MODEL.md Ingestion)
+    "feedparser>=6.0,<7.0",
+]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = [
+    "pytest>=8.0,<10.0",
+    "ruff>=0.6,<1.0",
+    "mypy>=1.11,<3.0",
+    "pre-commit>=3.7,<5.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+# APScheduler 3.x and feedparser ship no py.typed marker / stubs; these
+# are scoped to those packages, not a blanket relaxation of strict mode.
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "feedparser"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: requires a live PostgreSQL/pgvector database (see compose.yaml)",
+    "network: requires live network access to an external source (S001-T012 live RSS feed; excluded from default pytest and from CI)",
+]

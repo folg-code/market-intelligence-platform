@@ -13,3 +13,7 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Scratch files the agent commit/PR workflow writes into the repo root
+.git-commit-msg.txt
+.git-pr-body.txt

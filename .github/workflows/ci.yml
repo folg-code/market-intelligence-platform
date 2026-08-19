@@ -1,0 +1,105 @@
+# Quality gate (S001-T013): lint, type-check, and test on every push and PR
+# into main/sprint branches, so nobody has to remember to run
+# `scripts/check.py` by hand. Mirrors that script's order - lint, then
+# type-check, then tests - via the `needs:` dependency between jobs below.
+#
+# No secret is required for this workflow to pass: the PostgreSQL/pgvector
+# service and the `.env` file the test job writes both use the same dummy,
+# non-sensitive credentials as `.env.example`.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "sprint/**"
+  pull_request:
+    branches:
+      - main
+      - "sprint/**"
+
+jobs:
+  lint-and-type:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project (dev extras)
+        run: pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Mypy (strict type-check over src/)
+        run: mypy src
+
+  test:
+    name: Test (unit + integration)
+    runs-on: ubuntu-latest
+    needs: lint-and-type
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: moj_projekt
+          POSTGRES_USER: moj_projekt
+          POSTGRES_PASSWORD: change-me
+        # Published on 5433, not the default 5432: the integration test
+        # fixtures under tests/integration/ hardcode POSTGRES_PORT=5433 (the
+        # same host-port compose.yaml's `db` service uses by default), so the
+        # service container must match that port unmodified.
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U moj_projekt -d moj_projekt"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project (dev extras)
+        run: pip install -e ".[dev]"
+
+      # A `.env` file - not job-level `env:` vars - is deliberately used to
+      # supply the DB credentials: `Settings` reads `POSTGRES_PASSWORD` from
+      # `.env` without it ever landing in the process environment, which is
+      # exactly what tests/unit/test_settings.py::test_missing_password_is_rejected
+      # (constructed with `_env_file=None`) requires to still raise when no
+      # password is supplied. A literal `POSTGRES_PASSWORD` env var at the
+      # job or step level would make that unit test fail here even though it
+      # never touches the database.
+      - name: Write .env for host-side access to the service container
+        run: |
+          cat <<'EOF' > .env
+          APP_ENV=development
+          POSTGRES_HOST=localhost
+          POSTGRES_PORT=5433
+          POSTGRES_DB=moj_projekt
+          POSTGRES_USER=moj_projekt
+          POSTGRES_PASSWORD=change-me
+          EOF
+
+      - name: Run migrations to head
+        run: alembic upgrade head
+
+      # Overrides the default `addopts = "-m 'not integration'"` from
+      # pyproject.toml so the full suite - unit and integration - runs here.
+      # Network-marked tests (the live RSS feed) stay excluded: they need
+      # outbound HTTP to a third-party host and are not required for CI
+      # to pass (S001-T012 / S001-T013).
+      - name: Run tests (unit + integration)
+        run: pytest -o addopts="" -m "not network"

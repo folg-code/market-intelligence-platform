@@ -5,11 +5,13 @@
 ```text
 Sprint: 001
 Phase: Roadmap Phases 0, 1, 2 (partial - one source adapter only)
-Status: Approved
+Status: Done
 Approved By: folga33 (user, in-conversation approval)
 Approved Date: 2026-08-17
 Planned Start: 2026-08-17
 Planned End:
+Actual Start: 2026-08-17 (PR #1 merged)
+Actual End: 2026-08-19 (PR #14 merged; sprint closed)
 Sprint Goal Owner: architect (planning) / engineer (implementation)
 Depends On: human approval of PRODUCT_VISION, ARCHITECTURE_FOUNDATIONS,
             DOMAIN_MODEL, ADR-0001..ADR-0014, and ROADMAP
@@ -92,20 +94,20 @@ board.
 
 | Task | Outcome | Depends on | Status |
 |---|---|---|---|
-| S001-T001 | Wave 0 decisions reviewed and approved by a human | - | TODO |
-| S001-T002 | Toolchain and dependency baseline; one command runs lint + types + tests | T001 | TODO |
-| S001-T003 | Docker Compose stack (`app` + Postgres/pgvector) with typed settings and a `/health` endpoint | T002 | TODO |
-| S001-T004 | Alembic baseline; `vector` extension enabled by migration | T003 | TODO |
-| S001-T005 | Pure domain value objects and enums, unit-tested without a database | T002 | TODO |
-| S001-T006 | Source + Document persisted, with immutability and dedupe enforced | T004, T005 | TODO |
-| S001-T007 | Event + EvidencePack persisted, facts/claims kept separate | T006 | TODO |
-| S001-T008 | Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation persisted, incl. the identity embedding column | T007 | TODO |
-| S001-T009 | NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry persisted (append-only where required) | T008 | TODO |
-| S001-T010 | MVP Source registry seeded idempotently with tiers and publisher metadata | T006 | TODO |
-| S001-T011 | Cycle skeleton on APScheduler with a CycleRun record and overlap prevention | T004, T006 | TODO |
-| S001-T012 | One live RSS source adapter producing real Documents inside the cycle | T010, T011 | TODO |
-| S001-T013 | CI runs lint, type-check, and tests on every push and PR | T002 | TODO |
-| S001-T014 | `WORKFLOWS.md`, README quickstart, and reference docs match the running system | T012 | TODO |
+| S001-T001 | Wave 0 decisions reviewed and approved by a human | - | Done |
+| S001-T002 | Toolchain and dependency baseline; one command runs lint + types + tests | T001 | Done |
+| S001-T003 | Docker Compose stack (`app` + Postgres/pgvector) with typed settings and a `/health` endpoint | T002 | Done |
+| S001-T004 | Alembic baseline; `vector` extension enabled by migration | T003 | Done |
+| S001-T005 | Pure domain value objects and enums, unit-tested without a database | T002 | Done |
+| S001-T006 | Source + Document persisted, with immutability and dedupe enforced | T004, T005 | Done |
+| S001-T007 | Event + EvidencePack persisted, facts/claims kept separate | T006 | Done |
+| S001-T008 | Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation persisted, incl. the identity embedding column | T007 | Done |
+| S001-T009 | NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry persisted (append-only where required) | T008 | Done |
+| S001-T010 | MVP Source registry seeded idempotently with tiers and publisher metadata | T006 | Done |
+| S001-T011 | Cycle skeleton on APScheduler with a CycleRun record and overlap prevention | T004, T006 | Done |
+| S001-T012 | One live RSS source adapter producing real Documents inside the cycle | T010, T011 | Done |
+| S001-T013 | CI runs lint, type-check, and tests on every push and PR | T002 | Done |
+| S001-T014 | `WORKFLOWS.md`, README quickstart, and reference docs match the running system | T012 | Done |
 
 ### 5.1 Task Specifications
 
@@ -246,9 +248,14 @@ board.
 - **Scope:** models and migration for Narrative (including `identity_embedding`
   as a `vector` column plus `embedding_model` and `embedding_version`),
   NarrativeEpisode, NarrativeEvent (assignment, with shortlist reference and
-  LLMRun reference fields), NarrativeRelation.
+  LLMRun reference fields), NarrativeRelation. Also adds the foreign key from
+  `evidence_packs.narrative_id` to `narratives.id` (T007 created the column
+  and its unique-with-`evidence_version` constraint before the `narratives`
+  table existed, so the FK could not be added then - reviewer note on
+  S001-T007, carried forward here so it is not dropped).
 - **Acceptance:**
   - `canonical_key` is unique;
+  - `evidence_packs.narrative_id` has a foreign key to `narratives.id`;
   - a Narrative without an `economic_mechanism` or `market_interpretation` is
     rejected;
   - a Narrative with a NULL `identity_embedding` is fully valid (the embedding is
@@ -421,34 +428,177 @@ PR boundaries are the engineer's call; this is the expected dependency shape.
 
 ## 9. Review
 
+Closed 2026-08-19. Recorded from the merged result (PRs #1-#14 into
+`sprint/mvp-foundation`), not from the plan.
+
 ### Completed
 
-- (filled at sprint close)
+All 14 planned tasks, in 14 merged PRs:
+
+| Task | PR | Delivered |
+|---|---|---|
+| S001-T001 | - | Wave 0 approval gate; human approval of vision/architecture/ADR-0001..0014/roadmap recorded 2026-08-17 |
+| S001-T002 | #1 | Pinned dependencies, `src/` module layout, `scripts/check.py` = ruff + strict mypy + pytest |
+| S001-T003 | #2 | `compose.yaml` (`app` + `pgvector/pgvector:pg16`), `.env.example`, typed `config/settings.py`, `GET /health` reporting DB + pgvector |
+| S001-T004 | #3 | Alembic baseline; migration `0001` enables the `vector` extension; migrations never run on app startup |
+| S001-T005 | #4 | Pure domain value objects/enums; no-infrastructure-import boundary test; forbidden-vocabulary test |
+| S001-T006 | #5 | Source + Document persistence, migration `0002`, DB immutability trigger, natural-key dedupe via `ON CONFLICT DO NOTHING` |
+| S001-T007 | #6 | Event + EvidencePack, migration `0003`; facts/claims separate (ADR-0008); EvidencePack fully immutable and versioned |
+| S001-T008 | #7 | Narrative aggregate, migration `0004`; `identity_embedding vector(384)` placeholder; `EXCLUDE USING gist` on episodes; self-relation CHECK; the deferred `evidence_packs.narrative_id` FK |
+| S001-T009 | #8 | Impact/Alert/LLMRun/AuditEntry, migration `0005`; append-only triggers; `ck_llm_runs_no_latest_alias`; the deferred `narrative_events.llm_run_id` FK |
+| S001-T010 | #9 | Declarative, idempotent Source registry seed (3 Tier 1, 3 Tier 2, pairwise-distinct publishers) |
+| S001-T013 | #10 | CI: lint + strict mypy, then unit + integration against a live pgvector service; verified red-then-green |
+| (process) | #11 | Local pre-commit hooks mirroring `scripts/check.py`; tester/reviewer mechanical checks slimmed in root `CLAUDE.md` |
+| S001-T011 | #12 | Cycle skeleton: `Clock`, `CycleRun`, six ordered stages, per-stage failure isolation, `run_once`, migration `0006`; overlap prevented twice (`max_instances=1` + partial unique index) |
+| S001-T012 | #13 | RSS adapter interface + Bloomberg Markets implementation wired into the ingest stage; per-source failure isolation; dedupe reuse |
+| S001-T014 | #14 | `docs/reference/WORKFLOWS.md` (clone to stored Document), README quickstart, refreshed `ARCHITECTURE_OVERVIEW.md` / `MODULE_MAP.md` / `docs/README.md` / root `CLAUDE.md` |
+
+All eight sprint-level acceptance criteria in section 7 are met, including the
+last one: no LLM call exists anywhere in this sprint's code.
 
 ### Not Completed
 
-- (filled at sprint close)
+Nothing planned was dropped. What remains open was out of scope by design:
+
+- Only one of the MVP source adapters was built (Bloomberg Markets RSS). The
+  Fed/FOMC, BLS, SEC EDGAR, Reuters and AP adapters were explicitly deferred,
+  so Roadmap Phase 2 is **partially** delivered, not complete.
+- `Planned End` was never filled in during the sprint; the sprint ran
+  2026-08-17 to 2026-08-19.
 
 ### Demonstrated Capability
 
-- (filled at sprint close)
+```text
+git clone -> docker compose up -> alembic upgrade head -> seed sources ->
+one cycle -> real Bloomberg Markets Document rows in PostgreSQL,
+recorded in a CycleRun, with a re-run creating zero duplicates
+```
+
+- All 12 MVP entities from `DOMAIN_MODEL.md` section 3 are persisted with
+  migrations, plus `cycle_runs`.
+- Domain invariants have DB-level backstops where they are genuine invariants:
+  immutability triggers (Document, EvidencePack), append-only triggers
+  (LLMRun, AuditEntry), pinned-model-ID CHECK, non-neutral-direction CHECK,
+  episode-overlap EXCLUDE, self-relation CHECK, dedupe/idempotency
+  constraints.
+- Mechanical quality gates run without anyone remembering them: pre-commit
+  locally, CI on every push/PR.
 
 ### Problems Discovered
 
-- (filled at sprint close)
+Recorded in the newly created `docs/planning/PROBLEM_REGISTRY.md`:
+
+- PRB-001 - a local `.env` can leak into the unit suite and make
+  `test_missing_password_is_rejected` fail. Environment-level, pre-existing,
+  hit repeatedly by testers in T007-T009, never fixed.
+- PRB-002 - the Reuters and AP seed `feed_url` values are not live public
+  feeds, so a full cycle records those sources as failed every run.
+- PRB-003 - the three-condition NarrativeEvent assignment rule
+  (`DOMAIN_MODEL.md` section 5) is not enforced anywhere yet. Correctly out of
+  a persistence-only sprint's scope, but Phase 4 must close it.
+- PRB-004 - `cycle_runs.update()` has no DB-level guard against re-updating an
+  already-terminal row (inert today).
+- PRB-005 - the planning registries themselves did not exist for the whole
+  sprint, despite being referenced by reviewers and by
+  `PROJECT_MANAGEMENT.md` section 6. Resolved by this closeout.
+
+None is CRITICAL or HIGH.
 
 ### Decisions Required
 
-- (filled at sprint close)
+No new decision was surfaced by the sprint. The four decisions open at sprint
+start are still open, unchanged, and none of them blocked any task:
+
+| Decision | Needed by |
+|---|---|
+| Embedding model source (local open-weight vs a second paid API) | Roadmap Phase 4 |
+| Dashboard access protection when reachable beyond localhost | before any VPS deploy |
+| Retention policy for document bodies and LLM `raw_output` | Phase 10 |
+| Monthly LLM cost ceiling | before Phase 3 spending grows |
+
+The embedding-model decision is now also the repayment trigger for TD-003
+(the `vector(384)` placeholder), which raises its cost of delay slightly but
+does not make it urgent.
 
 ### Technical Debt Added
 
-- (filled at sprint close)
+Recorded in the newly created `docs/planning/TECHNICAL_DEBT.md`. All four
+entries are LOW/MEDIUM and self-approvable per the `governance` matrix:
+
+- TD-001 - the forbidden-vocabulary checker still misses a forbidden word
+  buried in a separator-less identifier (`postsignal`); accepted deliberately
+  because closing it reintroduces the `contradiction_signals` false positive.
+- TD-002 - `EvidencePack.market_evidence` must-be-empty is enforced in the
+  domain layer only, with no DB CHECK; accepted because ADR-0003 makes that
+  data valid once a market feed exists, so a DB constraint would have to be
+  removed later.
+- TD-003 - `identity_embedding` is `vector(384)`, a documented placeholder
+  dimension tied to the still-open embedding-model decision.
+- TD-004 - `NarrativeInstrumentImpact` is a current-state row updated by
+  upsert, with no assessment history.
 
 ### Lessons Learned
 
-- (filled at sprint close)
+1. **Per-task documentation cannot be deferred.** `tech-writer` was skipped
+   after the merges of T002-T006 and had to be caught up in one retroactive
+   pass (commits `630154e`, `e2548cf`). The fix was made mid-sprint: the
+   "Per-task delivery loop" section in root `CLAUDE.md` now makes the
+   `engineer -> tester -> reviewer -> tech-writer` order explicit, and from
+   T007 onward the doc sync ran inside each task's own PR. This is the
+   sprint's main process lesson.
+2. **The review loop paid for itself in defects tests alone did not catch.**
+   Three real defects were found by `tester`/`reviewer` after the engineer
+   self-reported green:
+   - T006: the Document immutability trigger protected every content column
+     but not the `id` primary key. Found via raw SQL against the live
+     database, fixed in-PR (the guard `IF NEW.id IS DISTINCT FROM OLD.id` is
+     in migration `0002` today).
+   - T008: the fix for a genuine false positive in the forbidden-vocabulary
+     test (`contradiction_signals`) over-corrected into a blind spot for
+     compound snake_case identifiers such as `signal_strength`. Caught by
+     `tester`, closed with token-based matching (`1ad9f17`).
+   - T009: the ADR-0010 pinned-model-ID rule was enforced in the domain layer
+     only, with no DB backstop, while the analogous ADR-0006 rule in the same
+     migration did have one. Caught by `tester`, closed with
+     `ck_llm_runs_no_latest_alias` (`5b18156`).
+
+   Squash merges hide these in-PR corrections from `git log`; the review
+   record, not the history, is the evidence.
+3. **"Enforce it in the database too" is a judgment call, not a reflex.** The
+   counter-example is `market_evidence`: the reviewer deliberately left it
+   domain-only because ADR-0003 makes an empty `market_evidence` a temporary
+   MVP condition, not a permanent invariant - a DB constraint would need
+   removing once a market feed exists. Recorded as TD-002, an accepted
+   trade-off, not a defect.
+4. **Mechanical gates belong in hooks and CI, not in reviewer attention.**
+   Mid-sprint (PR #11) pre-commit hooks were added mirroring
+   `scripts/check.py`, and `tester`/`reviewer` were relieved of routinely
+   re-running ruff/mypy/unit tests, with a fallback when CI cannot be
+   confirmed green for the exact commit. This moved review effort onto live-DB
+   behaviour and ADR compliance, which is where the three defects above were
+   actually found.
+5. **Deferred foreign keys need an explicit carrier.** Two FKs could not be
+   created when their column was (`evidence_packs.narrative_id` in T007,
+   `narrative_events.llm_run_id` in T008). Both were carried forward as an
+   explicit line in the *next* task's scope and landed in `0004` and `0005`.
+   Writing the deferral into the following task's spec, not a comment, is what
+   kept them from being lost.
+6. **A registry that does not exist does not get used.** Reviewers referenced
+   `PROBLEM_REGISTRY.md` and `TECHNICAL_DEBT.md` throughout the sprint while
+   neither file existed, so limitations lived in PR bodies and in
+   `CURRENT_STATUS.md` section 9 instead. Both now exist and are backfilled.
 
 ### Follow-up
 
-- (filled at sprint close)
+Carried into Sprint 002 planning (`architect`'s call, not decided here):
+
+- Complete Roadmap Phase 2: the remaining MVP source adapters (Fed/FOMC, BLS,
+  SEC EDGAR, and working newswire feeds), which also resolves PRB-002.
+- Open Roadmap Phase 3, the first LLM slice: extraction, versioned prompts and
+  output schemas, the deterministic validation layer (ADR-0002), and `LLMRun`
+  recording on every material call (ADR-0007/ADR-0010) - writing into the
+  schema this sprint built.
+- Before Phase 3 spending grows, the monthly LLM cost ceiling decision needs
+  an answer.
+- Cheap hygiene, not sprint-worthy on its own: PRB-001 (document or fix the
+  `.env` trap) and PRB-004 (terminal-`CycleRun` guard).

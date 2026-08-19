@@ -10,15 +10,17 @@
 | `planning/ROADMAP.md` | Phases, dependencies, completion criteria - direction, not a schedule | reviewed per phase |
 | `planning/PROJECT_MANAGEMENT.md` | How work is planned, Definition of Ready / Done, sources of truth | rarely changes |
 | `planning/CURRENT_STATUS.md` | Snapshot: where the project stands right now | updated at each phase/sprint change |
-| `planning/sprints/` | Sprint scope, task breakdown, Wave 0 decisions | per sprint |
+| `planning/sprints/` | Sprint scope, task breakdown, Wave 0 decisions, sprint review | per sprint |
+| `planning/PROBLEM_REGISTRY.md` | Observed problems, risks, and gaps - not features | on discovery/resolution |
+| `planning/TECHNICAL_DEBT.md` | Knowingly-accepted shortcuts, with a repayment trigger | on acceptance/repayment |
 | `reference/ARCHITECTURE_OVERVIEW.md` | The component picture as it actually is | updated continuously |
 | `reference/MODULE_MAP.md` | Code layout, module responsibilities, dependency direction | updated continuously |
-| `reference/WORKFLOWS.md` | How to set up and run things (created in Sprint 001, task S001-T014) | updated continuously |
+| `reference/WORKFLOWS.md` | How to set up and run things: clone, compose, migrate, seed, one cycle, checks | updated continuously |
 
 Also at the repo root: `CLAUDE.md` - project-specific coding conventions, loaded
 automatically in every session.
 
 Approval state: everything under `vision/`, all ADRs, `ROADMAP.md`, and
-`sprints/SPRINT_001.md` are currently `Proposed`/`Planned` and require human
-approval before implementation may rely on them (see the `governance` skill).
-Documents under `reference/` are descriptive and need no approval.
+`sprints/SPRINT_001.md` were approved by the user in-conversation on
+2026-08-17 (see `planning/CURRENT_STATUS.md` section 6). Documents under
+`reference/` are descriptive and need no approval.
