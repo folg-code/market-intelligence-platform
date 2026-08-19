@@ -2,7 +2,7 @@
 
 Living document - update whenever a module is added, removed, or moved.
 
-Last updated: 2026-08-19. Matches `sprint/first-llm-slice` after S002-T002..T009.
+Last updated: 2026-08-19. Matches `sprint/first-llm-slice` after S002-T002..T010.
 
 ## Layout
 
@@ -14,7 +14,8 @@ src/moj_projekt/
                  narrative.py, narrative_episode.py, narrative_event.py,
                  narrative_relation.py, instrument_impact.py, alert.py,
                  llm_run.py, audit_entry.py, clock.py, cycle_run.py,
-                 repositories.py, enums.py, evidence.py, embedding.py
+                 budget.py, repositories.py, enums.py, evidence.py,
+                 embedding.py
   persistence/   SQLAlchemy models, repository implementations, health check,
                  seed, unit of work. Files: models.py, health.py, seed_sources.py,
                  seed_data/sources.py, unit_of_work.py, document_repository.py,
@@ -41,8 +42,9 @@ src/moj_projekt/
                  database. Cycle extract stage calls the service.
   cycle/         stages.py (six-stage list), ingest.py (production ingest),
                  extract.py (COLLECTED queue, per-document isolation,
-                 CYCLE_EXTRACT_DOCUMENT_CAP), run_cycle.py (orchestration
-                 + CycleRun recording), run_once.py (scheduler-free CLI:
+                 CYCLE_EXTRACT_DOCUMENT_CAP, monthly budget guard before
+                 each call), run_cycle.py (orchestration + CycleRun
+                 recording), run_once.py (scheduler-free CLI:
                  python -m moj_projekt.cycle.run_once; FakeLLMClient until T011)
   api/           app.py - FastAPI app, lifespan (db engine + APScheduler),
                  GET /health. Dashboard read path is Phase 7.
@@ -72,12 +74,12 @@ scripts/
 | Module | Responsibility | Status | Depends on | May NOT depend on |
 |---|---|---|---|---|
 | `config` | Load and validate settings from the environment (`Settings`, `get_settings`) | Implemented | - | anything project-specific |
-| `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, Clock, CycleRun, enums, evidence, embedding descriptor | - | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
+| `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, Clock, CycleRun, BudgetPolicy, enums, evidence, embedding descriptor | - | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
 | `persistence` | Map domain objects to PostgreSQL; implement repository interfaces; seed the Source registry; `/health` db+pgvector check | Implemented for every MVP entity above. Document: DB-level immutability trigger + dedupe (`ON CONFLICT DO NOTHING`). Event: non-empty `source_ids` CHECK. EvidencePack: immutability trigger + `independent_source_count <= source_count`. Narrative: unique `canonical_key`, `identity_embedding vector(384)` placeholder with all-or-nothing CHECK. NarrativeEpisode: `EXCLUDE USING gist`. NarrativeEvent: composite PK. NarrativeRelation: self-relation CHECK + unique triple. NarrativeInstrumentImpact: upsert on `(narrative_id, instrument)`. Alert: unique `(narrative_id, alert_type, trigger_key)`. LLMRun and AuditEntry: append-only trigger; LLMRun rejects `"latest"`. CycleRun: partial unique index (at most one RUNNING) plus `0007` terminal-row UPDATE trigger. Repositories flush; `SqlAlchemyUnitOfWork` owns session lifecycle and the single commit/rollback. Seed: `python -m moj_projekt.persistence.seed_sources` (only `bloomberg_markets` active) | `domain`, `config` | `ingestion`, `cycle`, `api` |
 | `ingestion` | Fetch and normalize external sources into Documents | Implemented (S001-T012): `SourceAdapter` + one RSS adapter. Persistence is the cycle ingest stage. A later adapter implements the interface and is registered by `source_type` | `domain`, `config` | `cycle`, `api` |
 | `llm` | One port to call a model: versioned prompts/schema, pinned ids, FakeLLMClient | Implemented (S002-T006). Real Anthropic path is T011 | `config` | `domain`, `cycle`, `api` — Anthropic SDK must not leak outside this package (`tests/unit/test_llm_boundary.py`) |
 | `extraction` | Parse and judge model output into `accepted` / `proposed` / `rejected` (ADR-0002); persist the verdict's consequences | Implemented (S002-T007 validator, S002-T008 service). Only `service.py` constructs an `Event`, and only on `accepted`. Writes through a caller-owned `UnitOfWork` (`LLMRun` always; Event rows only on `accepted`). Duplicate fact/claim text is not a merge (ADR-0008). Called by the cycle extract stage | `domain`, `llm` (artifacts, client port, model table) | SQLAlchemy, httpx, Anthropic SDK (`tests/unit/test_extraction_boundary.py`); `cycle`, `api`, `persistence` |
-| `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler-free entrypoint | Implemented (S001-T011/T012, S002-T002, S002-T009): six-stage list; ingest wired with per-source isolation; extract wired (`COLLECTED` oldest-first, `CYCLE_EXTRACT_DOCUMENT_CAP` default 20, terminal verdict -> `EVENTS_EXTRACTED`, transport failure stays `COLLECTED`); remaining stages passthrough; overlap prevention at scheduler (`max_instances=1`) and DB. CycleRun two-phase write is one unit of work for RUNNING, one per stage, then one that finalizes even if a stage rolled back. Monthly budget guard is T010 | `domain`, `ingestion`, `persistence`, `extraction`, `llm` | `api` |
+| `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler-free entrypoint | Implemented (S001-T011/T012, S002-T002, S002-T009, S002-T010): six-stage list; ingest wired with per-source isolation; extract wired (`COLLECTED` oldest-first, `CYCLE_EXTRACT_DOCUMENT_CAP` default 20, terminal verdict -> `EVENTS_EXTRACTED`, transport failure stays `COLLECTED`); remaining stages passthrough; overlap prevention at scheduler (`max_instances=1`) and DB. CycleRun two-phase write is one unit of work for RUNNING, one per stage, then one that finalizes even if a stage rolled back. Monthly budget guard (ADR-0015): spend from `llm_runs.token_usage` vs `llm/models.py` rates for the UTC month of `CycleRun.started_at`; consulted before each extract call; at ceiling zero further calls, cycle `SUCCEEDED`, docs stay `COLLECTED`; soft threshold recorded only | `domain`, `ingestion`, `persistence`, `extraction`, `llm` | `api` |
 | `api` | ASGI app, lifespan, `GET /health` | Implemented for health and scheduler start/stop; dashboard read path is later | all of the above | - |
 
 Dependency direction is one-way: `api` -> `cycle` -> `ingestion`/`persistence`/`extraction`/`llm` -> `domain`/`config`. `extraction` sits beside `llm` (`extraction` -> `domain` + `llm`; persistence via `UnitOfWork`; called by `cycle` extract). Nothing imports upward.
@@ -86,7 +88,7 @@ Dependency direction is one-way: `api` -> `cycle` -> `ingestion`/`persistence`/`
 
 - `src/moj_projekt/llm/CLAUDE.md` - pinned model ids, prompt-version bumps, secrets, Anthropic SDK stays in this package.
 - `src/moj_projekt/extraction/CLAUDE.md` - validator judges only (no repair); only `service.py` constructs an `Event`, and only on `accepted`; caller owns the `UnitOfWork`; verdicts are `CandidateStatus`; schema artifacts via `llm.artifacts`.
-- `src/moj_projekt/cycle/CLAUDE.md` - ingest/extract isolation; empty extract queue must not call the LLM; `EVENTS_EXTRACTED` means a terminal verdict, not that Event rows exist.
+- `src/moj_projekt/cycle/CLAUDE.md` - ingest/extract isolation; empty extract queue must not call the LLM; budget guard before each call (UTC month of `CycleRun.started_at`); `EVENTS_EXTRACTED` means a terminal verdict, not that Event rows exist.
 
 ## Related
 

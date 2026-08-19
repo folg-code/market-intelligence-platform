@@ -19,8 +19,10 @@ Python 3.11+, Docker Desktop, then:
 4. Copy `.env.example` to `.env` (`Copy-Item` on PowerShell, `cp` on bash).
    Host-side commands use `localhost:5433`; the `app` container still uses
    `db:5432`. `CYCLE_EXTRACT_DOCUMENT_CAP` (default 20) caps how many
-   `COLLECTED` Documents one cycle extracts; it is not the monthly spend
-   ceiling.
+   `COLLECTED` Documents one cycle extracts. `LLM_MONTHLY_CEILING_USD`
+   (default 10) is the monthly spend ceiling; at the ceiling extract
+   issues no further calls and the cycle still succeeds.
+   `LLM_MONTHLY_SOFT_THRESHOLD_RATIO` (default 0.80) is recorded only.
 5. `docker compose up -d` then `alembic upgrade head`
 6. `python -m moj_projekt.persistence.seed_sources`
 7. `python -m moj_projekt.cycle.run_once`
