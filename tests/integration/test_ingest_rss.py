@@ -32,7 +32,7 @@ from moj_projekt.domain.source import Source
 from moj_projekt.ingestion.rss import RSS_SOURCE_TYPE, RssFeedAdapter
 from moj_projekt.persistence.seed_data.sources import SEED_SOURCES
 from moj_projekt.persistence.seed_sources import seed_sources
-from moj_projekt.persistence.source_repository import SqlAlchemySourceRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -104,10 +104,12 @@ def _adapter(clock: Clock, handler: httpx.MockTransport) -> RssFeedAdapter:
 
 def test_fixture_feed_creates_documents_and_re_run_inserts_none(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
     payload = (_FIXTURES / "sample_feed.xml").read_bytes()
     feed_url = "https://example.com/markets/feed.xml"
-    SqlAlchemySourceRepository(migrated_session).add(_rss_source("bloomberg_markets", feed_url))
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        uow.sources.add(_rss_source("bloomberg_markets", feed_url))
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert str(request.url) == feed_url
@@ -117,13 +119,13 @@ def test_fixture_feed_creates_documents_and_re_run_inserts_none(
     adapter = _adapter(clock, httpx.MockTransport(handler))
     try:
         first = run_once(
-            migrated_session,
+            engine,
             clock=clock,
             adapters={RSS_SOURCE_TYPE: adapter},
         )
         count_after_first = _document_count(migrated_session)
         second = run_once(
-            migrated_session,
+            engine,
             clock=clock,
             adapters={RSS_SOURCE_TYPE: adapter},
         )
@@ -164,12 +166,14 @@ def test_fixture_feed_creates_documents_and_re_run_inserts_none(
 )
 def test_simulated_fetch_failure_leaves_cycle_ok_source_failed_and_no_documents(
     migrated_session: Session,
+    engine: Engine,
     status_code: int | None,
     body: bytes | None,
     reason: str,
 ) -> None:
     feed_url = "https://example.com/markets/feed.xml"
-    SqlAlchemySourceRepository(migrated_session).add(_rss_source("bloomberg_markets", feed_url))
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        uow.sources.add(_rss_source("bloomberg_markets", feed_url))
 
     def handler(_request: httpx.Request) -> httpx.Response:
         if status_code is None:
@@ -179,7 +183,7 @@ def test_simulated_fetch_failure_leaves_cycle_ok_source_failed_and_no_documents(
     adapter = _adapter(_FixedClock(), httpx.MockTransport(handler))
     try:
         result = run_once(
-            migrated_session,
+            engine,
             clock=_FixedClock(),
             adapters={RSS_SOURCE_TYPE: adapter},
         )
@@ -196,12 +200,15 @@ def test_simulated_fetch_failure_leaves_cycle_ok_source_failed_and_no_documents(
 
 
 @pytest.mark.network
-def test_live_bloomberg_feed_creates_documents(migrated_session: Session) -> None:
-    seed_sources(migrated_session)
+def test_live_bloomberg_feed_creates_documents(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seed_sources(uow.sources)
 
-    first = run_once(migrated_session)
+    first = run_once(engine)
     count_after_first = _document_count(migrated_session)
-    second = run_once(migrated_session)
+    second = run_once(engine)
     count_after_second = _document_count(migrated_session)
 
     assert first is not None

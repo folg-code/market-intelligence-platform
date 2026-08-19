@@ -16,28 +16,31 @@ declarative sources in
 (:class:`~moj_projekt.persistence.source_repository.SqlAlchemySourceRepository`),
 so running this command any number of times leaves the registry unchanged
 after the first run - no additional idempotency logic is needed here.
+
+The CLI opens one unit of work around the whole seed so the registry
+write is a single commit.
 """
 
 from __future__ import annotations
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
 from moj_projekt.config.settings import Settings
 from moj_projekt.domain.repositories import SourceRepository
 from moj_projekt.domain.source import Source
 from moj_projekt.persistence.seed_data.sources import SEED_SOURCES
-from moj_projekt.persistence.source_repository import SqlAlchemySourceRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 __all__ = ["seed_sources"]
 
 
-def seed_sources(session: Session) -> list[Source]:
+def seed_sources(repository: SourceRepository) -> list[Source]:
     """Persist every declarative seed Source, idempotently.
 
     Returns the stored (post-upsert) rows in ``SEED_SOURCES`` order.
+    The caller owns the transaction (flush here, commit in the unit of
+    work).
     """
-    repository: SourceRepository = SqlAlchemySourceRepository(session)
     return [repository.add(source) for source in SEED_SOURCES]
 
 
@@ -46,8 +49,8 @@ def main() -> int:
     settings = Settings()
     engine = create_engine(settings.database_url)
     try:
-        with Session(engine) as session:
-            seeded = seed_sources(session)
+        with SqlAlchemyUnitOfWork(engine) as uow:
+            seeded = seed_sources(uow.sources)
     finally:
         engine.dispose()
 

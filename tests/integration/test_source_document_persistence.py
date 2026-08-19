@@ -30,8 +30,7 @@ from moj_projekt.config.settings import Settings
 from moj_projekt.domain.document import Document, ProcessingStatus
 from moj_projekt.domain.enums import SourceTier
 from moj_projekt.domain.source import Source
-from moj_projekt.persistence.document_repository import SqlAlchemyDocumentRepository
-from moj_projekt.persistence.source_repository import SqlAlchemySourceRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -71,7 +70,7 @@ def migrated_session(alembic_config: Config, engine: Engine) -> Iterator[Session
         command.downgrade(alembic_config, "base")
 
 
-def _seed_source(session: Session) -> Source:
+def _seed_source(engine: Engine) -> Source:
     source = Source(
         key="reuters_markets",
         name="Reuters Markets",
@@ -79,7 +78,8 @@ def _seed_source(session: Session) -> Source:
         tier=SourceTier.PROFESSIONAL,
         publisher="Reuters",
     )
-    return SqlAlchemySourceRepository(session).add(source)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        return uow.sources.add(source)
 
 
 def _make_document(**overrides: object) -> Document:
@@ -97,13 +97,14 @@ def _make_document(**overrides: object) -> Document:
     return Document(**defaults)  # type: ignore[arg-type]
 
 
-def test_document_round_trips_unchanged(migrated_session: Session) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
+def test_document_round_trips_unchanged(
+    migrated_session: Session, engine: Engine
+) -> None:
+    _seed_source(engine)
     document = _make_document()
-
-    stored = repo.add(document)
-    fetched = repo.get(stored.id)  # type: ignore[arg-type]
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(document)
+        fetched = uow.documents.get(stored.id)  # type: ignore[arg-type]
 
     assert fetched is not None
     assert fetched.source_key == document.source_key
@@ -117,13 +118,14 @@ def test_document_round_trips_unchanged(migrated_session: Session) -> None:
 
 def test_inserting_the_same_document_twice_yields_one_row(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
+    _seed_source(engine)
     document = _make_document()
-
-    first = repo.add(document)
-    second = repo.add(document)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        first = uow.documents.add(document)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        second = uow.documents.add(document)
 
     assert first.id == second.id
     count = migrated_session.execute(
@@ -134,10 +136,11 @@ def test_inserting_the_same_document_twice_yields_one_row(
 
 def test_update_attempt_on_collected_content_is_rejected(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
-    stored = repo.add(_make_document())
+    _seed_source(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(_make_document())
 
     with pytest.raises(DBAPIError, match="immutable"):
         migrated_session.execute(
@@ -148,10 +151,12 @@ def test_update_attempt_on_collected_content_is_rejected(
     migrated_session.rollback()
 
 
-def test_id_mutation_is_rejected_at_the_database(migrated_session: Session) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
-    stored = repo.add(_make_document())
+def test_id_mutation_is_rejected_at_the_database(
+    migrated_session: Session, engine: Engine
+) -> None:
+    _seed_source(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(_make_document())
 
     with pytest.raises(DBAPIError, match="immutable"):
         migrated_session.execute(
@@ -164,11 +169,14 @@ def test_id_mutation_is_rejected_at_the_database(migrated_session: Session) -> N
 
 def test_processing_status_regression_is_rejected_at_the_database(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
-    stored = repo.add(_make_document())
-    repo.advance_processing_status(stored.id, ProcessingStatus.PROCESSED)  # type: ignore[arg-type]
+    _seed_source(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(_make_document())
+        uow.documents.advance_processing_status(
+            stored.id, ProcessingStatus.PROCESSED  # type: ignore[arg-type]
+        )
 
     with pytest.raises(DBAPIError, match="cannot regress"):
         migrated_session.execute(
@@ -181,29 +189,35 @@ def test_processing_status_regression_is_rejected_at_the_database(
     migrated_session.rollback()
 
 
-def test_advance_processing_status_moves_forward(migrated_session: Session) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
-    stored = repo.add(_make_document())
-
-    advanced = repo.advance_processing_status(
-        stored.id,  # type: ignore[arg-type]
-        ProcessingStatus.EVENTS_EXTRACTED,
-    )
+def test_advance_processing_status_moves_forward(
+    migrated_session: Session, engine: Engine
+) -> None:
+    _seed_source(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(_make_document())
+        advanced = uow.documents.advance_processing_status(
+            stored.id,  # type: ignore[arg-type]
+            ProcessingStatus.EVENTS_EXTRACTED,
+        )
 
     assert advanced.processing_status is ProcessingStatus.EVENTS_EXTRACTED
 
 
 def test_advance_processing_status_rejects_regression(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
-    stored = repo.add(_make_document())
-    repo.advance_processing_status(stored.id, ProcessingStatus.PROCESSED)  # type: ignore[arg-type]
+    _seed_source(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(_make_document())
+        uow.documents.advance_processing_status(
+            stored.id, ProcessingStatus.PROCESSED  # type: ignore[arg-type]
+        )
 
-    with pytest.raises(ValueError, match="cannot regress"):
-        repo.advance_processing_status(
+    with pytest.raises(ValueError, match="cannot regress"), SqlAlchemyUnitOfWork(
+        engine
+    ) as uow:
+        uow.documents.advance_processing_status(
             stored.id,  # type: ignore[arg-type]
             ProcessingStatus.COLLECTED,
         )
@@ -211,13 +225,14 @@ def test_advance_processing_status_rejects_regression(
 
 def test_collected_before_published_is_flagged_not_corrected(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    _seed_source(migrated_session)
-    repo = SqlAlchemyDocumentRepository(migrated_session)
+    _seed_source(engine)
     anomalous_collected_at = _PUBLISHED - timedelta(minutes=1)
     document = _make_document(collected_at=anomalous_collected_at)
 
-    stored = repo.add(document)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.documents.add(document)
 
     assert stored.collected_at == anomalous_collected_at
     assert stored.has_collection_timestamp_anomaly is True

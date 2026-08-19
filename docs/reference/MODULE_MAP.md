@@ -2,8 +2,8 @@
 
 Living document - update whenever a module is added, removed, or moved.
 
-Last updated: 2026-08-19. Matches the package layout on `sprint/mvp-foundation`
-after S001-T014 (`WORKFLOWS.md`, README, reference docs).
+Last updated: 2026-08-19. Matches the package layout on `sprint/first-llm-slice`
+after S002-T002 (unit of work; repositories flush, they do not commit).
 
 ## Layout
 
@@ -17,8 +17,8 @@ src/moj_projekt/
                  llm_run.py, audit_entry.py, clock.py, cycle_run.py,
                  repositories.py, enums.py, evidence.py, embedding.py
   persistence/   SQLAlchemy models, repository implementations, health check,
-                 seed. Files: models.py, health.py, seed_sources.py,
-                 seed_data/sources.py, document_repository.py,
+                 seed, unit of work. Files: models.py, health.py, seed_sources.py,
+                 seed_data/sources.py, unit_of_work.py, document_repository.py,
                  source_repository.py, event_repository.py,
                  evidence_pack_repository.py, narrative_repository.py,
                  narrative_episode_repository.py, narrative_event_repository.py,
@@ -60,9 +60,9 @@ scripts/
 |---|---|---|---|---|
 | `config` | Load and validate settings from the environment (`Settings`, `get_settings`) | Implemented | - | anything project-specific |
 | `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, Clock, CycleRun, enums, evidence, embedding descriptor | - | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
-| `persistence` | Map domain objects to PostgreSQL; implement repository interfaces; seed the Source registry; `/health` db+pgvector check | Implemented for every MVP entity above. Document: DB-level immutability trigger + dedupe (`ON CONFLICT DO NOTHING`). Event: non-empty `source_ids` CHECK. EvidencePack: immutability trigger + `independent_source_count <= source_count`. Narrative: unique `canonical_key`, `identity_embedding vector(384)` placeholder with all-or-nothing CHECK. NarrativeEpisode: `EXCLUDE USING gist`. NarrativeEvent: composite PK. NarrativeRelation: self-relation CHECK + unique triple. NarrativeInstrumentImpact: upsert on `(narrative_id, instrument)`. Alert: unique `(narrative_id, alert_type, trigger_key)`. LLMRun and AuditEntry: append-only trigger; LLMRun rejects `"latest"`. CycleRun: partial unique index, at most one RUNNING; `update()` is deliberate. Seed: `python -m moj_projekt.persistence.seed_sources` over six declarative sources | `domain`, `config` | `ingestion`, `cycle`, `api` |
+| `persistence` | Map domain objects to PostgreSQL; implement repository interfaces; seed the Source registry; `/health` db+pgvector check | Implemented for every MVP entity above. Document: DB-level immutability trigger + dedupe (`ON CONFLICT DO NOTHING`). Event: non-empty `source_ids` CHECK. EvidencePack: immutability trigger + `independent_source_count <= source_count`. Narrative: unique `canonical_key`, `identity_embedding vector(384)` placeholder with all-or-nothing CHECK. NarrativeEpisode: `EXCLUDE USING gist`. NarrativeEvent: composite PK. NarrativeRelation: self-relation CHECK + unique triple. NarrativeInstrumentImpact: upsert on `(narrative_id, instrument)`. Alert: unique `(narrative_id, alert_type, trigger_key)`. LLMRun and AuditEntry: append-only trigger; LLMRun rejects `"latest"`. CycleRun: partial unique index, at most one RUNNING; `update()` is deliberate. Repositories flush; `SqlAlchemyUnitOfWork` owns session lifecycle and the single commit/rollback. Seed: `python -m moj_projekt.persistence.seed_sources` over six declarative sources | `domain`, `config` | `ingestion`, `cycle`, `api` |
 | `ingestion` | Fetch and normalize external sources into Documents | Implemented (S001-T012): `SourceAdapter` + one RSS adapter. Persistence is the cycle ingest stage. A later adapter implements the interface and is registered by `source_type` | `domain`, `config` | `cycle`, `api` |
-| `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler-free entrypoint | Implemented (S001-T011/T012): six-stage list; ingest wired with per-source isolation; other stages passthrough; overlap prevention at scheduler (`max_instances=1`) and DB | `domain`, `ingestion`, `persistence` | `api` |
+| `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler-free entrypoint | Implemented (S001-T011/T012, S002-T002): six-stage list; ingest wired with per-source isolation; other stages passthrough; overlap prevention at scheduler (`max_instances=1`) and DB. CycleRun two-phase write is one unit of work for RUNNING, one per stage, then one that finalizes even if a stage rolled back | `domain`, `ingestion`, `persistence` | `api` |
 | `api` | ASGI app, lifespan, `GET /health` | Implemented for health and scheduler start/stop; dashboard read path is later | all of the above | - |
 
 Dependency direction is one-way: `api` -> `cycle` -> `ingestion`/`persistence`

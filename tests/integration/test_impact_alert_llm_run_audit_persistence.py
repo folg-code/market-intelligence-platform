@@ -41,13 +41,7 @@ from moj_projekt.domain.evidence import EvidenceRef
 from moj_projekt.domain.instrument_impact import NarrativeInstrumentImpact
 from moj_projekt.domain.llm_run import LLMRun
 from moj_projekt.domain.narrative import Narrative
-from moj_projekt.persistence.alert_repository import SqlAlchemyAlertRepository
-from moj_projekt.persistence.audit_entry_repository import SqlAlchemyAuditEntryRepository
-from moj_projekt.persistence.instrument_impact_repository import (
-    SqlAlchemyNarrativeInstrumentImpactRepository,
-)
-from moj_projekt.persistence.llm_run_repository import SqlAlchemyLLMRunRepository
-from moj_projekt.persistence.narrative_repository import SqlAlchemyNarrativeRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -159,35 +153,36 @@ def test_upgrade_to_head_and_back_round_trips_new_tables(
 
 def test_one_current_impact_assessment_per_narrative_instrument(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
-    repo = SqlAlchemyNarrativeInstrumentImpactRepository(migrated_session)
-
-    first = repo.upsert(
-        NarrativeInstrumentImpact(
-            narrative_id=narrative.id,  # type: ignore[arg-type]
-            instrument=Instrument.NQ,
-            relevance=True,
-            direction=ImpactDirection.NEUTRAL,
-            confidence=0.4,
-            horizon=ImpactHorizon.UNKNOWN,
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
+        first = uow.instrument_impacts.upsert(
+            NarrativeInstrumentImpact(
+                narrative_id=narrative.id,  # type: ignore[arg-type]
+                instrument=Instrument.NQ,
+                relevance=True,
+                direction=ImpactDirection.NEUTRAL,
+                confidence=0.4,
+                horizon=ImpactHorizon.UNKNOWN,
+            )
         )
-    )
-    second = repo.upsert(
-        NarrativeInstrumentImpact(
-            narrative_id=narrative.id,  # type: ignore[arg-type]
-            instrument=Instrument.NQ,
-            relevance=True,
-            direction=ImpactDirection.BULLISH,
-            confidence=0.8,
-            horizon=ImpactHorizon.INTRADAY,
-            rationale="Lower discount rate supports higher equity multiples.",
-            evidence_refs=(EvidenceRef(kind=EvidenceRefKind.DOCUMENT, target_id=str(uuid4())),),
+        second = uow.instrument_impacts.upsert(
+            NarrativeInstrumentImpact(
+                narrative_id=narrative.id,  # type: ignore[arg-type]
+                instrument=Instrument.NQ,
+                relevance=True,
+                direction=ImpactDirection.BULLISH,
+                confidence=0.8,
+                horizon=ImpactHorizon.INTRADAY,
+                rationale="Lower discount rate supports higher equity multiples.",
+                evidence_refs=(
+                    EvidenceRef(kind=EvidenceRefKind.DOCUMENT, target_id=str(uuid4())),
+                ),
+            )
         )
-    )
-
+        fetched = uow.instrument_impacts.get(narrative.id, Instrument.NQ)  # type: ignore[arg-type]
     assert first.id == second.id
-    fetched = repo.get(narrative.id, Instrument.NQ)  # type: ignore[arg-type]
     assert fetched is not None
     assert fetched.direction is ImpactDirection.BULLISH
     assert fetched.confidence == 0.8
@@ -195,8 +190,10 @@ def test_one_current_impact_assessment_per_narrative_instrument(
 
 def test_non_neutral_direction_without_evidence_is_rejected_at_the_database(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
 
     # The domain constructor already rejects this
     # (NarrativeInstrumentImpact.__post_init__), so exercising the CHECK
@@ -218,24 +215,27 @@ def test_non_neutral_direction_without_evidence_is_rejected_at_the_database(
     migrated_session.rollback()
 
 
-def test_alerts_are_unique_per_narrative_type_trigger(migrated_session: Session) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
-    repo = SqlAlchemyAlertRepository(migrated_session)
-    alert = Alert(
-        narrative_id=narrative.id,  # type: ignore[arg-type]
-        alert_type=AlertType.EMERGING_NARRATIVE,
-        trigger_key="event:1234",
-        created_at=_CREATED_AT,
-    )
-
-    first = repo.add(alert)
-    second = repo.add(alert)
+def test_alerts_are_unique_per_narrative_type_trigger(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
+        alert = Alert(
+            narrative_id=narrative.id,  # type: ignore[arg-type]
+            alert_type=AlertType.EMERGING_NARRATIVE,
+            trigger_key="event:1234",
+            created_at=_CREATED_AT,
+        )
+        first = uow.alerts.add(alert)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        second = uow.alerts.add(alert)
 
     assert first.id == second.id
 
 
-def test_llm_runs_reject_update(migrated_session: Session) -> None:
-    stored = SqlAlchemyLLMRunRepository(migrated_session).add(_make_llm_run())
+def test_llm_runs_reject_update(migrated_session: Session, engine: Engine) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.llm_runs.add(_make_llm_run())
 
     with pytest.raises(DBAPIError, match="llm_runs: rows are append-only"):
         migrated_session.execute(
@@ -246,8 +246,9 @@ def test_llm_runs_reject_update(migrated_session: Session) -> None:
     migrated_session.rollback()
 
 
-def test_llm_runs_reject_delete(migrated_session: Session) -> None:
-    stored = SqlAlchemyLLMRunRepository(migrated_session).add(_make_llm_run())
+def test_llm_runs_reject_delete(migrated_session: Session, engine: Engine) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.llm_runs.add(_make_llm_run())
 
     with pytest.raises(DBAPIError, match="llm_runs: rows are append-only"):
         migrated_session.execute(
@@ -257,16 +258,19 @@ def test_llm_runs_reject_delete(migrated_session: Session) -> None:
     migrated_session.rollback()
 
 
-def test_audit_entries_reject_update(migrated_session: Session) -> None:
-    stored = SqlAlchemyAuditEntryRepository(migrated_session).add(
-        AuditEntry(
-            actor="trader",
-            action="reject_event_assignment",
-            target_id="narrative_event:1234",
-            timestamp=_CREATED_AT,
-            reason="Not the same economic mechanism.",
+def test_audit_entries_reject_update(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.audit_entries.add(
+            AuditEntry(
+                actor="trader",
+                action="reject_event_assignment",
+                target_id="narrative_event:1234",
+                timestamp=_CREATED_AT,
+                reason="Not the same economic mechanism.",
+            )
         )
-    )
 
     with pytest.raises(DBAPIError, match="audit_entries: rows are append-only"):
         migrated_session.execute(
@@ -277,16 +281,19 @@ def test_audit_entries_reject_update(migrated_session: Session) -> None:
     migrated_session.rollback()
 
 
-def test_audit_entries_reject_delete(migrated_session: Session) -> None:
-    stored = SqlAlchemyAuditEntryRepository(migrated_session).add(
-        AuditEntry(
-            actor="trader",
-            action="reject_event_assignment",
-            target_id="narrative_event:1234",
-            timestamp=_CREATED_AT,
-            reason="Not the same economic mechanism.",
+def test_audit_entries_reject_delete(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.audit_entries.add(
+            AuditEntry(
+                actor="trader",
+                action="reject_event_assignment",
+                target_id="narrative_event:1234",
+                timestamp=_CREATED_AT,
+                reason="Not the same economic mechanism.",
+            )
         )
-    )
 
     with pytest.raises(DBAPIError, match="audit_entries: rows are append-only"):
         migrated_session.execute(
@@ -341,9 +348,12 @@ def test_llm_runs_reject_latest_model_version_at_the_database(
     migrated_session.rollback()
 
 
-def test_llm_run_carries_reproducibility_fields(migrated_session: Session) -> None:
-    stored = SqlAlchemyLLMRunRepository(migrated_session).add(_make_llm_run())
-    fetched = SqlAlchemyLLMRunRepository(migrated_session).get(stored.id)  # type: ignore[arg-type]
+def test_llm_run_carries_reproducibility_fields(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.llm_runs.add(_make_llm_run())
+        fetched = uow.llm_runs.get(stored.id)  # type: ignore[arg-type]
 
     assert fetched is not None
     assert fetched.provider == "anthropic"

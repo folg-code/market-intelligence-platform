@@ -33,11 +33,7 @@ from moj_projekt.domain.event import Event
 from moj_projekt.domain.evidence import EvidenceRef
 from moj_projekt.domain.evidence_pack import EvidencePack
 from moj_projekt.domain.narrative import Narrative
-from moj_projekt.persistence.event_repository import SqlAlchemyEventRepository
-from moj_projekt.persistence.evidence_pack_repository import (
-    SqlAlchemyEvidencePackRepository,
-)
-from moj_projekt.persistence.narrative_repository import SqlAlchemyNarrativeRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -102,7 +98,7 @@ def _make_pack(**overrides: object) -> EvidencePack:
     return EvidencePack(**defaults)  # type: ignore[arg-type]
 
 
-def _seed_narrative(session: Session) -> UUID:
+def _seed_narrative(engine: Engine) -> UUID:
     """Create a Narrative and return its id.
 
     ``evidence_packs.narrative_id`` gained a foreign key to ``narratives.id``
@@ -119,21 +115,23 @@ def _seed_narrative(session: Session) -> UUID:
         last_seen=_GENERATED_AT,
         updated_at=_GENERATED_AT,
     )
-    stored = SqlAlchemyNarrativeRepository(session).add(narrative)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.narratives.add(narrative)
     assert stored.id is not None
     return stored.id
 
 
 def test_event_round_trips_with_facts_and_claims_kept_separate(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repo = SqlAlchemyEventRepository(migrated_session)
     fact = {"text": "Rates held at 5.25-5.50%.", "category": "observed_fact"}
     claim = {"text": "A cut is likely next quarter.", "category": "source_claim"}
     event = _make_event(extracted_facts=(fact,), source_claims=(claim,))
 
-    stored = repo.add(event)
-    fetched = repo.get(stored.id)  # type: ignore[arg-type]
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.events.add(event)
+        fetched = uow.events.get(stored.id)  # type: ignore[arg-type]
 
     assert fetched is not None
     assert fetched.extracted_facts == (fact,)
@@ -172,14 +170,18 @@ def test_event_cannot_be_stored_with_empty_source_ids_at_the_database(
 
 def test_evidence_pack_rebuild_creates_a_new_version_row(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repo = SqlAlchemyEvidencePackRepository(migrated_session)
-    narrative_id = _seed_narrative(migrated_session)
-    first = repo.add(_make_pack(narrative_id=narrative_id, evidence_version=1))
-    second = repo.add(_make_pack(narrative_id=narrative_id, evidence_version=2))
-
+    narrative_id = _seed_narrative(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        first = uow.evidence_packs.add(
+            _make_pack(narrative_id=narrative_id, evidence_version=1)
+        )
+        second = uow.evidence_packs.add(
+            _make_pack(narrative_id=narrative_id, evidence_version=2)
+        )
+        current = uow.evidence_packs.get_current(narrative_id)
     assert first.id != second.id
-    current = repo.get_current(narrative_id)
     assert current is not None
     assert current.evidence_version == 2
 
@@ -190,10 +192,12 @@ def test_evidence_pack_rebuild_creates_a_new_version_row(
     assert count == 2
 
 
-def test_evidence_pack_row_is_never_mutated(migrated_session: Session) -> None:
-    repo = SqlAlchemyEvidencePackRepository(migrated_session)
-    narrative_id = _seed_narrative(migrated_session)
-    stored = repo.add(_make_pack(narrative_id=narrative_id))
+def test_evidence_pack_row_is_never_mutated(
+    migrated_session: Session, engine: Engine
+) -> None:
+    narrative_id = _seed_narrative(engine)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.evidence_packs.add(_make_pack(narrative_id=narrative_id))
 
     with pytest.raises(DBAPIError, match="immutable"):
         migrated_session.execute(
@@ -208,8 +212,9 @@ def test_evidence_pack_row_is_never_mutated(migrated_session: Session) -> None:
 
 def test_independent_source_count_le_source_count_enforced_at_the_database(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    narrative_id = _seed_narrative(migrated_session)
+    narrative_id = _seed_narrative(engine)
     with pytest.raises(
         IntegrityError, match="ck_evidence_packs_independent_le_source_count"
     ):
@@ -228,9 +233,9 @@ def test_independent_source_count_le_source_count_enforced_at_the_database(
 
 def test_evidence_pack_traces_evidence_to_documents_and_events(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repo = SqlAlchemyEvidencePackRepository(migrated_session)
-    narrative_id = _seed_narrative(migrated_session)
+    narrative_id = _seed_narrative(engine)
     document_ref = EvidenceRef(kind=EvidenceRefKind.DOCUMENT, target_id=str(uuid4()))
     event_ref = EvidenceRef(kind=EvidenceRefKind.EVENT, target_id=str(uuid4()))
     pack = _make_pack(
@@ -239,8 +244,11 @@ def test_evidence_pack_traces_evidence_to_documents_and_events(
         official_evidence=(event_ref,),
     )
 
-    stored = repo.add(pack)
-    fetched = repo.get_version(stored.narrative_id, stored.evidence_version)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.evidence_packs.add(pack)
+        fetched = uow.evidence_packs.get_version(
+            stored.narrative_id, stored.evidence_version
+        )
 
     assert fetched is not None
     assert fetched.supporting_evidence == (document_ref,)

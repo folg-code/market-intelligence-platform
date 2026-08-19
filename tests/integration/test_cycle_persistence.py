@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from moj_projekt.config.settings import Settings
 from moj_projekt.cycle.run_once import run_once
 from moj_projekt.domain.cycle_run import CycleRun, CycleRunStatus
-from moj_projekt.persistence.cycle_run_repository import SqlAlchemyCycleRunRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -103,9 +103,10 @@ def test_upgrade_to_head_and_back_round_trips_cycle_runs_table(
 
 def test_two_consecutive_cycles_each_produce_one_terminal_cycle_run(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    first = run_once(migrated_session)
-    second = run_once(migrated_session)
+    first = run_once(engine)
+    second = run_once(engine)
 
     assert first is not None
     assert second is not None
@@ -130,26 +131,27 @@ def test_two_consecutive_cycles_each_produce_one_terminal_cycle_run(
 
 def test_repository_add_get_running_and_update_round_trip(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repository = SqlAlchemyCycleRunRepository(migrated_session)
-
-    created = repository.add(CycleRun(started_at=_STARTED_AT))
-    assert created.id is not None
-    running = repository.get_running()
-    assert running is not None
-    assert running.id == created.id
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        created = uow.cycle_runs.add(CycleRun(started_at=_STARTED_AT))
+        assert created.id is not None
+        running = uow.cycle_runs.get_running()
+        assert running is not None
+        assert running.id == created.id
 
     ended_at = _STARTED_AT + timedelta(seconds=5)
     finished = created.finish(status=CycleRunStatus.SUCCEEDED, ended_at=ended_at)
-    updated = repository.update(finished)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        updated = uow.cycle_runs.update(finished)
 
-    assert updated.status is CycleRunStatus.SUCCEEDED
-    assert repository.get_running() is None
+        assert updated.status is CycleRunStatus.SUCCEEDED
+        assert uow.cycle_runs.get_running() is None
 
-    fetched = repository.get(created.id)
-    assert fetched is not None
-    assert fetched.ended_at == ended_at
-    assert fetched.status is CycleRunStatus.SUCCEEDED
+        fetched = uow.cycle_runs.get(created.id)
+        assert fetched is not None
+        assert fetched.ended_at == ended_at
+        assert fetched.status is CycleRunStatus.SUCCEEDED
 
 
 def test_second_running_row_is_rejected_by_the_database(

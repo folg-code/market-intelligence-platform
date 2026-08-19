@@ -111,7 +111,7 @@ class SqlAlchemyNarrativeInstrumentImpactRepository:
             )
         )
         self._session.execute(statement)
-        self._session.commit()
+        self._session.flush()
 
         row = self._session.execute(
             select(NarrativeInstrumentImpactModel).where(

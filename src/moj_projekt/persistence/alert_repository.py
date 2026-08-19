@@ -56,7 +56,7 @@ class SqlAlchemyAlertRepository:
             .on_conflict_do_nothing(constraint="uq_alerts_narrative_type_trigger")
         )
         self._session.execute(statement)
-        self._session.commit()
+        self._session.flush()
 
         row = self._session.execute(
             select(AlertModel).where(

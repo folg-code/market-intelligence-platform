@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,6 +18,7 @@ from moj_projekt.cycle.stages import Stage
 from moj_projekt.domain.cycle_run import CycleRun, CycleRunStatus, StageOutcome
 from moj_projekt.domain.document import Document
 from moj_projekt.domain.enums import SourceTier
+from moj_projekt.domain.repositories import UnitOfWork
 from moj_projekt.domain.source import Source
 from moj_projekt.ingestion.adapter import SourceFetchError
 
@@ -86,6 +88,30 @@ class _FakeDocumentRepository:
         return next((doc for doc in self.documents if doc.id == document_id), None)
 
 
+class _FakeUnitOfWork:
+    def __init__(
+        self,
+        *,
+        cycle_runs: _FakeCycleRunRepository,
+        sources: _FakeSourceRepository,
+        documents: _FakeDocumentRepository,
+    ) -> None:
+        self.cycle_runs = cycle_runs
+        self.sources = sources
+        self.documents = documents
+
+    def __enter__(self) -> _FakeUnitOfWork:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc: object,
+        traceback: object,
+    ) -> None:
+        return None
+
+
 class _StaticAdapter:
     def __init__(self, documents: Sequence[Document]) -> None:
         self._documents = list(documents)
@@ -128,6 +154,11 @@ def _document(source_key: str = "bloomberg_markets") -> Document:
     )
 
 
+def _ok(cycle_run: CycleRun, uow: UnitOfWork) -> CycleRun:
+    del uow
+    return cycle_run
+
+
 def _run_ingest(
     *,
     sources: Sequence[Source],
@@ -135,16 +166,25 @@ def _run_ingest(
     documents: _FakeDocumentRepository | None = None,
 ) -> tuple[CycleRun, _FakeDocumentRepository]:
     document_repository = documents if documents is not None else _FakeDocumentRepository()
-    ingest = make_ingest_stage(
-        source_repository=_FakeSourceRepository(sources),
-        document_repository=document_repository,
-        adapters=adapters,
-    )
+    cycle_runs = _FakeCycleRunRepository()
+    source_repository = _FakeSourceRepository(sources)
+
+    def factory() -> UnitOfWork:
+        return cast(
+            UnitOfWork,
+            _FakeUnitOfWork(
+                cycle_runs=cycle_runs,
+                sources=source_repository,
+                documents=document_repository,
+            ),
+        )
+
+    ingest = make_ingest_stage(adapters=adapters)
     clock = _FakeClock([_T0, _T0 + timedelta(seconds=1)])
     result = run_cycle(
         clock=clock,
-        repository=_FakeCycleRunRepository(),
-        stages=[ingest, Stage("extract", lambda cycle_run: cycle_run)],
+        unit_of_work=factory,
+        stages=[ingest, Stage("extract", _ok)],
     )
     assert result is not None
     return result, document_repository

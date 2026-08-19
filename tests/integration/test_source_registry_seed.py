@@ -27,6 +27,7 @@ from moj_projekt.config.settings import Settings
 from moj_projekt.domain.enums import SourceTier
 from moj_projekt.persistence.seed_data.sources import SEED_SOURCES
 from moj_projekt.persistence.seed_sources import seed_sources
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -66,9 +67,12 @@ def migrated_session(alembic_config: Config, engine: Engine) -> Iterator[Session
 
 def test_seeding_twice_leaves_the_registry_unchanged(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    first_run = seed_sources(migrated_session)
-    second_run = seed_sources(migrated_session)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        first_run = seed_sources(uow.sources)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        second_run = seed_sources(uow.sources)
 
     assert {source.key for source in first_run} == {
         source.key for source in second_run
@@ -79,8 +83,10 @@ def test_seeding_twice_leaves_the_registry_unchanged(
 
 def test_every_seeded_source_has_one_tier_and_a_publisher(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    seeded = seed_sources(migrated_session)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seeded = seed_sources(uow.sources)
 
     assert len(seeded) == len(SEED_SOURCES)
     for source in seeded:
@@ -90,8 +96,10 @@ def test_every_seeded_source_has_one_tier_and_a_publisher(
 
 def test_registry_includes_tier_1_and_tier_2_sources(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    seeded = seed_sources(migrated_session)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seeded = seed_sources(uow.sources)
 
     tiers = {source.tier for source in seeded}
     assert SourceTier.PRIMARY in tiers
@@ -100,8 +108,10 @@ def test_registry_includes_tier_1_and_tier_2_sources(
 
 def test_seeded_sources_are_persisted_and_retrievable_individually(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    seed_sources(migrated_session)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        seed_sources(uow.sources)
 
     row = migrated_session.execute(
         text("SELECT tier, publisher FROM sources WHERE key = :key"),

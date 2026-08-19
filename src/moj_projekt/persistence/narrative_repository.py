@@ -95,7 +95,7 @@ class SqlAlchemyNarrativeRepository:
             ),
         )
         self._session.add(row)
-        self._session.commit()
+        self._session.flush()
         self._session.refresh(row)
         return _to_domain(row)
 

@@ -73,7 +73,7 @@ class SqlAlchemyDocumentRepository:
             .on_conflict_do_nothing(constraint="uq_documents_dedupe_key")
         )
         self._session.execute(statement)
-        self._session.commit()
+        self._session.flush()
 
         row = self._session.execute(
             select(DocumentModel).where(
@@ -99,7 +99,7 @@ class SqlAlchemyDocumentRepository:
             )
             .values(processing_status=int(new_status))
         )
-        self._session.commit()
+        self._session.flush()
 
         # `execute()` on an UPDATE returns a CursorResult at runtime, which
         # does have `rowcount` - the generic `Result[Any]` return type just
