@@ -13,18 +13,20 @@ Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
                          (one source adapter of the MVP set); Phase 3 planned
                          as Sprint 002
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-2 landed
-                         (S002-T002..T007): unit of work, env-isolated unit
-                         tests, terminal CycleRun trigger, honest seed
-                         registry, llm/ client port with FakeLLMClient,
-                         and the deterministic extraction validator.
-Overall Status:          Sprint 002 in progress - Waves 1-2 merged
-                         (PRs #16-#21). Next: S002-T008 (extraction service).
+Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-2 plus
+                         T008 landed (S002-T002..T008): unit of work,
+                         env-isolated unit tests, terminal CycleRun trigger,
+                         honest seed registry, llm/ client port with
+                         FakeLLMClient, the deterministic extraction
+                         validator, and ExtractionService persisting Event
+                         + LLMRun.
+Overall Status:          Sprint 002 in progress - Waves 1-2 and T008 merged
+                         (PRs #16-#23). Next: S002-T009 (cycle extract stage).
 Active Sprint:           002 - The first LLM slice (Status: Approved)
 Last Completed Sprint:   001 - Foundation to first real document
                          (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
-Next Planned Capability: S002-T008 - extraction service writing Event
-                         + LLMRun in one transaction, driven by FakeLLMClient
+Next Planned Capability: S002-T009 - cycle extract stage: work queue,
+                         per-cycle cap, per-document isolation, status advance
 ```
 
 ## 3. Current Objective
@@ -156,11 +158,18 @@ machinery is the real unknown.
   database (PR #21). Duplicate fact/claim *text* is not a merge (ADR-0008:
   merge = one field/list); `facts_and_claims` field remapping remains.
   `llm/` lazy-loads Anthropic so importing extraction does not load the SDK.
+- S002-T008: `ExtractionService` renders the versioned prompt, calls an
+  injected `LLMClient` (`FakeLLMClient` in this task), validates with T007,
+  and writes inside one unit of work: `LLMRun` always (ADR-0007), Event
+  rows only on `accepted` (PR #23). `proposed`/`rejected` persist the run
+  and zero events. A well-formed empty `events` array is `accepted` with
+  no Event rows. Failure between the two writes leaves neither. The cycle
+  extract stage stays passthrough until T009.
 
 ## 5. Work in Progress
 
-- S002-T008 (extraction service: Event + `LLMRun` in one transaction) is next;
-  depends on T002, T006, T007.
+- S002-T009 (cycle extract stage: work queue, per-cycle cap, per-document
+  isolation, status advance) is next; depends on T008.
 
 ## 6. Blocked Work
 
@@ -222,7 +231,7 @@ embedding-model-source decision.
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
 | 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
-| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 7 / 12 |
+| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 8 / 12 |
 
 ## 12. Update Rules
 
