@@ -2,8 +2,8 @@
 
 Living document - update whenever a module is added, removed, or moved.
 
-Last updated: 2026-08-18. Matches the package layout on `sprint/mvp-foundation`
-after S001-T012/T013 (ingestion RSS adapter, cycle ingest, CI).
+Last updated: 2026-08-19. Matches the package layout on `sprint/mvp-foundation`
+after S001-T014 (`WORKFLOWS.md`, README, reference docs).
 
 ## Layout
 
@@ -59,7 +59,7 @@ scripts/
 | Module | Responsibility | Status | Depends on | May NOT depend on |
 |---|---|---|---|---|
 | `config` | Load and validate settings from the environment (`Settings`, `get_settings`) | Implemented | - | anything project-specific |
-| `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, Clock, CycleRun, enums, evidence, embedding descriptor | `config` (only for pure values) | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
+| `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, Clock, CycleRun, enums, evidence, embedding descriptor | - | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
 | `persistence` | Map domain objects to PostgreSQL; implement repository interfaces; seed the Source registry; `/health` db+pgvector check | Implemented for every MVP entity above. Document: DB-level immutability trigger + dedupe (`ON CONFLICT DO NOTHING`). Event: non-empty `source_ids` CHECK. EvidencePack: immutability trigger + `independent_source_count <= source_count`. Narrative: unique `canonical_key`, `identity_embedding vector(384)` placeholder with all-or-nothing CHECK. NarrativeEpisode: `EXCLUDE USING gist`. NarrativeEvent: composite PK. NarrativeRelation: self-relation CHECK + unique triple. NarrativeInstrumentImpact: upsert on `(narrative_id, instrument)`. Alert: unique `(narrative_id, alert_type, trigger_key)`. LLMRun and AuditEntry: append-only trigger; LLMRun rejects `"latest"`. CycleRun: partial unique index, at most one RUNNING; `update()` is deliberate. Seed: `python -m moj_projekt.persistence.seed_sources` over six declarative sources | `domain`, `config` | `ingestion`, `cycle`, `api` |
 | `ingestion` | Fetch and normalize external sources into Documents | Implemented (S001-T012): `SourceAdapter` + one RSS adapter. Persistence is the cycle ingest stage. A later adapter implements the interface and is registered by `source_type` | `domain`, `config` | `cycle`, `api` |
 | `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler-free entrypoint | Implemented (S001-T011/T012): six-stage list; ingest wired with per-source isolation; other stages passthrough; overlap prevention at scheduler (`max_instances=1`) and DB | `domain`, `ingestion`, `persistence` | `api` |

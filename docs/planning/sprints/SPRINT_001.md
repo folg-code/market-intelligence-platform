@@ -105,7 +105,7 @@ board.
 | S001-T011 | Cycle skeleton on APScheduler with a CycleRun record and overlap prevention | T004, T006 | Done |
 | S001-T012 | One live RSS source adapter producing real Documents inside the cycle | T010, T011 | Done |
 | S001-T013 | CI runs lint, type-check, and tests on every push and PR | T002 | Done |
-| S001-T014 | `WORKFLOWS.md`, README quickstart, and reference docs match the running system | T012 | TODO |
+| S001-T014 | `WORKFLOWS.md`, README quickstart, and reference docs match the running system | T012 | Done |
 
 ### 5.1 Task Specifications
 

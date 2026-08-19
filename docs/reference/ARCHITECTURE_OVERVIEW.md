@@ -4,14 +4,13 @@ Living document - describes the system as it currently is (and, where marked,
 what is planned but not yet built). No approval required; update it whenever a
 component is added, removed, or changed.
 
-Last updated: 2026-08-18 (Sprint 001 through S001-T013 on `sprint/mvp-foundation`)
+Last updated: 2026-08-19 (Sprint 001 through S001-T014 on `sprint/mvp-foundation`)
 
 ## 1. Current state
 
-Sprint 001 is in progress; the last implementation task (S001-T013) is merged
-and this file reflects that delivered shape. A clone plus compose, migrations,
-and seed yields a running `app` + `db` stack. `GET /health` reports database
-connectivity and pgvector availability. The 5-minute cycle runs in-process on
+Sprint 001 is delivered through T014; this file reflects that shape. A clone
+plus compose, migrations, and seed yields a running `app` + `db` stack.
+`GET /health` reports database connectivity and pgvector availability. The 5-minute cycle runs in-process on
 APScheduler, is invocable directly via `python -m moj_projekt.cycle.run_once`,
 and persists real Documents from one live RSS source (Bloomberg Markets) with
 per-source failure isolation. Every MVP entity in `DOMAIN_MODEL.md` section 3

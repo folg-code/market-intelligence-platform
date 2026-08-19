@@ -8,24 +8,16 @@ task status lives in the sprint table (and in an Issues tracker once one exists)
 ## 2. Status Metadata
 
 ```text
-Status Date:             2026-08-18
-Current Phase:           Sprint 001 in progress (Roadmap Phases 0-2)
+Status Date:             2026-08-19
+Current Phase:           Sprint 001 closeout (Roadmap Phases 0-2)
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Toolchain, Docker Compose stack, typed settings,
-                         /health endpoint, Alembic baseline, Source + Document
-                         persistence, Event + EvidencePack persistence,
-                         Narrative/NarrativeEpisode/NarrativeEvent/
-                         NarrativeRelation persistence,
-                         NarrativeInstrumentImpact/Alert/LLMRun/AuditEntry
-                         persistence, the seeded MVP Source registry, the CI
-                         pipeline, the APScheduler-driven processing cycle,
-                         and one live RSS source adapter (S001-T002..T013).
-                         No LLM code yet.
-Overall Status:          Approved - engineer continues with S001-T014
+Implementation Status:   Full Sprint 001 delivered: toolchain through
+                         WORKFLOWS.md (S001-T002..T014). No LLM code yet.
+Overall Status:          Approved - all Sprint 001 tasks done; sprint closeout
 Active Sprint:           001 - Foundation to first real document (Status: Approved)
 Last Completed Sprint:   none
-Next Planned Capability: S001-T014 - WORKFLOWS.md, README quickstart, and
-                         reference docs matching the running system
+Next Planned Capability: After Sprint 001: remaining Phase 2 source adapters
+                         and Phase 3, the first LLM slice
 ```
 
 ## 3. Current Objective
@@ -151,11 +143,14 @@ are in PostgreSQL", so Phase 3 (the first LLM slice) starts against real data.
   `SUCCEEDED` and no partial Document is written. Dedupe reuses
   `DocumentRepository.add()` ON CONFLICT. Live-feed test is marked `network`
   and excluded from CI.
+- S001-T014: `docs/reference/WORKFLOWS.md` (clone to a stored Document),
+  README quickstart, and a refresh of `ARCHITECTURE_OVERVIEW.md`,
+  `MODULE_MAP.md`, `docs/README.md`, and root `CLAUDE.md` to the delivered
+  system.
 
 ## 5. Work in Progress
 
-- S001-T014 (`WORKFLOWS.md`, README quickstart, reference docs refresh) is
-  the next task; not started.
+None. Sprint 001 tasks T001-T014 are complete; sprint closeout is next.
 
 ## 6. Blocked Work
 
@@ -204,7 +199,7 @@ layer, and `LLMRun` recording.
 
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
-| 001 | Foundation to first real document | APPROVED | 13 / 14 |
+| 001 | Foundation to first real document | APPROVED | 14 / 14 |
 
 ## 12. Update Rules
 
