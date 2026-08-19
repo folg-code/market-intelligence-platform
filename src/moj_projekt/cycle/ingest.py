@@ -17,9 +17,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from moj_projekt.cycle.extract import make_extract_stage
 from moj_projekt.cycle.stages import DEFAULT_STAGES, Stage
 from moj_projekt.domain.cycle_run import CycleRun, StageOutcome
 from moj_projekt.domain.repositories import UnitOfWork
+from moj_projekt.extraction.service import ExtractionService
 from moj_projekt.ingestion.adapter import SourceAdapter, SourceFetchError
 
 __all__ = ["build_production_stages", "make_ingest_stage"]
@@ -60,7 +62,14 @@ def make_ingest_stage(*, adapters: Mapping[str, SourceAdapter]) -> Stage:
 def build_production_stages(
     *,
     adapters: Mapping[str, SourceAdapter],
+    extraction_service: ExtractionService,
+    extract_document_cap: int,
 ) -> Sequence[Stage]:
-    """The six ordered stages with real ingest and the rest still passthrough."""
+    """The six ordered stages with real ingest and extract; the rest stay passthrough."""
     ingest = make_ingest_stage(adapters=adapters)
-    return tuple(ingest if stage.name == "ingest" else stage for stage in DEFAULT_STAGES)
+    extract = make_extract_stage(
+        service=extraction_service,
+        document_cap=extract_document_cap,
+    )
+    replaced = {"ingest": ingest, "extract": extract}
+    return tuple(replaced.get(stage.name, stage) for stage in DEFAULT_STAGES)

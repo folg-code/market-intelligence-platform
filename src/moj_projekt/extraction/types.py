@@ -13,6 +13,7 @@ from uuid import UUID
 from moj_projekt.domain.enums import CandidateStatus
 
 __all__ = [
+    "DEFAULT_VALIDATION_CONFIG",
     "MERGE_FIELD_NAMES",
     "DocumentContext",
     "ExtractionValidationResult",
@@ -86,6 +87,13 @@ class ValidationConfig:
             raise ValueError("ValidationConfig.occurred_at_max_before must not be negative")
         if self.occurred_at_max_after < timedelta(0):
             raise ValueError("ValidationConfig.occurred_at_max_after must not be negative")
+
+
+DEFAULT_VALIDATION_CONFIG = ValidationConfig(
+    auto_accept_min_confidence=0.7,
+    occurred_at_max_before=timedelta(days=365),
+    occurred_at_max_after=timedelta(days=2),
+)
 
 
 @dataclass(frozen=True, slots=True)

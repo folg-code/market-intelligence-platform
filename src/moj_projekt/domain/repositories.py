@@ -87,6 +87,16 @@ class DocumentRepository(Protocol):
 
     def get(self, document_id: UUID) -> Document | None: ...
 
+    def list_by_processing_status(
+        self, status: ProcessingStatus, *, limit: int
+    ) -> Sequence[Document]:
+        """Return Documents at ``status``, oldest ``collected_at`` first.
+
+        ``limit`` is the caller's bound (the extract stage's per-cycle
+        cap). Stable order is ``collected_at`` ascending, then ``id``.
+        """
+        ...
+
     def advance_processing_status(
         self, document_id: UUID, new_status: ProcessingStatus
     ) -> Document:

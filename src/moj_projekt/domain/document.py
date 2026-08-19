@@ -35,7 +35,12 @@ class ProcessingStatus(IntEnum):
     COLLECTED = 1
     """Persisted, unprocessed by any later stage."""
     EVENTS_EXTRACTED = 2
-    """At least one Event has been extracted from this Document."""
+    """Extraction attempted and a terminal verdict reached.
+
+    A terminal verdict is ``accepted``, ``proposed``, or ``rejected``
+    (including a legitimate zero-event extraction). This status does
+    **not** mean an Event row exists (D-S002-04 clause 3).
+    """
     PROCESSED = 3
     """This Document's contribution to narratives/evidence is complete."""
 

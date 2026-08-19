@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     # up against the next scheduled tick.
     cycle_interval_seconds: int = 300
     cycle_misfire_grace_seconds: int = 60
+    # Per-cycle extract cap (ADR-0015): bounds a single cycle's spend so an
+    # ingest surge cannot consume the monthly ceiling before the T010
+    # budget guard is next evaluated. Must be >= 1.
+    cycle_extract_document_cap: int = Field(default=20, ge=1)
 
     @property
     def database_url(self) -> str:

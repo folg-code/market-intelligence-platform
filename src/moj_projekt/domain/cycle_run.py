@@ -81,8 +81,9 @@ class CycleRun:
     ``stage_outcomes`` records, keyed by stage name, whether each of the
     ordered pipeline stages
     (:data:`moj_projekt.cycle.stages.DEFAULT_STAGES`) succeeded.
-    ``source_outcomes`` is the equivalent per-source map for ingestion
-    failures - populated by the ingest stage (S001-T012).
+    ``source_outcomes`` is the per-unit map for isolated work that must
+    not fail the cycle: ingest keys it by source key (S001-T012); extract
+    keys per-document transport failures by document id (S002-T009).
     ``failure_reason`` is the top-level reason the cycle as a whole is
     ``FAILED`` (e.g. naming which stage raised); it is distinct from any
     individual stage's own ``failure_reason`` in ``stage_outcomes``.
@@ -136,6 +137,15 @@ class CycleRun:
         return replace(
             self, source_outcomes={**self.source_outcomes, source_key: outcome}
         )
+
+    def with_document_outcome(self, document_id: UUID, outcome: StageOutcome) -> CycleRun:
+        """Record a per-document extract outcome on ``source_outcomes``.
+
+        Reuses the existing per-unit JSONB map (extraction adds no table
+        and no CycleRun column - D-S002-02 P8). Document ids do not
+        collide with ingest source keys.
+        """
+        return self.with_source_outcome(str(document_id), outcome)
 
     def finish(
         self,

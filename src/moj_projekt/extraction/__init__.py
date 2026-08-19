@@ -21,6 +21,7 @@ from moj_projekt.extraction.service import (
     token_usage_mapping,
 )
 from moj_projekt.extraction.types import (
+    DEFAULT_VALIDATION_CONFIG,
     MERGE_FIELD_NAMES,
     DocumentContext,
     ExtractionValidationResult,
@@ -32,6 +33,7 @@ from moj_projekt.extraction.types import (
 from moj_projekt.extraction.validator import validate_extraction
 
 __all__ = [
+    "DEFAULT_VALIDATION_CONFIG",
     "EXTRACTION_MAX_TOKENS",
     "EXTRACTION_PROVIDER",
     "EXTRACTION_TEMPERATURE",

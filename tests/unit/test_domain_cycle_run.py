@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 
@@ -110,6 +111,22 @@ def test_with_source_outcome_rejects_a_terminal_cycle_run() -> None:
 
     with pytest.raises(ValueError, match="terminal"):
         cycle_run.with_source_outcome("bloomberg_markets", StageOutcome(succeeded=True))
+
+
+def test_with_document_outcome_keys_source_outcomes_by_document_id() -> None:
+    document_id = UUID("12345678-1234-5678-1234-567812345678")
+    cycle_run = CycleRun(started_at=_STARTED_AT)
+
+    updated = cycle_run.with_document_outcome(
+        document_id, StageOutcome(succeeded=False, failure_reason="TimeoutError: timed out")
+    )
+
+    assert cycle_run.source_outcomes == {}
+    assert updated.source_outcomes == {
+        str(document_id): StageOutcome(
+            succeeded=False, failure_reason="TimeoutError: timed out"
+        )
+    }
 
 
 def test_finish_requires_a_terminal_status() -> None:

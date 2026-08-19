@@ -58,7 +58,8 @@ def run_cycle(
     one terminal state: ``SUCCEEDED`` if every stage ran and succeeded,
     ``FAILED`` otherwise, with ``failure_reason`` naming which stage failed
     and why. Per-source ingest failures do not raise; they stay on
-    ``source_outcomes`` and the cycle still ``SUCCEEDED``.
+    ``source_outcomes`` and the cycle still ``SUCCEEDED``. Per-document
+    extract transport failures behave the same way.
     """
     with unit_of_work() as uow:
         if uow.cycle_runs.get_running() is not None:
