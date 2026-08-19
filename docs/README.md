@@ -13,6 +13,7 @@
 | `planning/sprints/` | Sprint scope, task breakdown, Wave 0 decisions, sprint review | per sprint |
 | `planning/PROBLEM_REGISTRY.md` | Observed problems, risks, and gaps - not features | on discovery/resolution |
 | `planning/TECHNICAL_DEBT.md` | Knowingly-accepted shortcuts, with a repayment trigger | on acceptance/repayment |
+| `planning/IDEA_INBOX.md` | Directions considered but not committed to - explored, parked, or rejected, with reasoning kept | when an idea is raised, triggered, or graduates |
 | `reference/ARCHITECTURE_OVERVIEW.md` | The component picture as it actually is | updated continuously |
 | `reference/MODULE_MAP.md` | Code layout, module responsibilities, dependency direction | updated continuously |
 | `reference/WORKFLOWS.md` | How to set up and run things: clone, compose, migrate, seed, one cycle, checks | updated continuously |
