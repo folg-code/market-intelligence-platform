@@ -13,12 +13,14 @@ repository methods flush, they do not commit.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
 from moj_projekt.domain.alert import Alert
 from moj_projekt.domain.audit_entry import AuditEntry
+from moj_projekt.domain.budget import LLMRunSpendSlice
 from moj_projekt.domain.cycle_run import CycleRun
 from moj_projekt.domain.document import Document, ProcessingStatus
 from moj_projekt.domain.enums import Instrument
@@ -142,9 +144,7 @@ class EvidencePackRepository(Protocol):
         """
         ...
 
-    def get_version(
-        self, narrative_id: UUID, evidence_version: int
-    ) -> EvidencePack | None: ...
+    def get_version(self, narrative_id: UUID, evidence_version: int) -> EvidencePack | None: ...
 
 
 class NarrativeRepository(Protocol):
@@ -209,9 +209,7 @@ class NarrativeRelationRepository(Protocol):
         """
         ...
 
-    def get(
-        self, relation_id: UUID
-    ) -> NarrativeRelation | None: ...
+    def get(self, relation_id: UUID) -> NarrativeRelation | None: ...
 
 
 class NarrativeInstrumentImpactRepository(Protocol):
@@ -225,9 +223,7 @@ class NarrativeInstrumentImpactRepository(Protocol):
     :class:`~moj_projekt.domain.instrument_impact.NarrativeInstrumentImpact`).
     """
 
-    def upsert(
-        self, impact: NarrativeInstrumentImpact
-    ) -> NarrativeInstrumentImpact:
+    def upsert(self, impact: NarrativeInstrumentImpact) -> NarrativeInstrumentImpact:
         """Persist ``impact`` as the current assessment for its
         ``(narrative_id, instrument)`` pair, replacing any existing one.
         """
@@ -262,6 +258,16 @@ class LLMRunRepository(Protocol):
     def add(self, llm_run: LLMRun) -> LLMRun: ...
 
     def get(self, llm_run_id: UUID) -> LLMRun | None: ...
+
+    def list_spend_slices(
+        self, *, created_at_from: datetime, created_at_to: datetime
+    ) -> Sequence[LLMRunSpendSlice]:
+        """Return model + token_usage for runs in ``[created_at_from, created_at_to)``.
+
+        Used by the monthly budget guard (ADR-0015). Does not load
+        ``raw_output`` or other audit fields.
+        """
+        ...
 
 
 class AuditEntryRepository(Protocol):

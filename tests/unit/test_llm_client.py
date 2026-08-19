@@ -26,6 +26,7 @@ from moj_projekt.llm.models import (
     EXTRACTION_MODEL_ID,
     ModelSpec,
     model_spec_for,
+    spec_for_model_id,
 )
 
 _FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "llm"
@@ -130,6 +131,16 @@ def test_extraction_model_is_dated_pin_rejected_by_llmrun_latest_rule() -> None:
             validation_status=CandidateStatus.ACCEPTED,
             created_at=_CREATED_AT,
         )
+
+
+def test_spec_for_model_id_returns_the_extraction_rate_row() -> None:
+    spec = spec_for_model_id(EXTRACTION_MODEL_ID)
+
+    assert spec == model_spec_for(EVENT_EXTRACTION_TASK_TYPE)
+    assert spec.input_rate_per_million == 1.0
+    assert spec.output_rate_per_million == 5.0
+    with pytest.raises(KeyError, match="no rate table row"):
+        spec_for_model_id("claude-unknown-20990101")
 
 
 def test_undated_alias_is_rejected_by_the_rate_table() -> None:

@@ -9,6 +9,7 @@ import json
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
@@ -19,8 +20,16 @@ from moj_projekt.cycle.extract import make_extract_stage
 from moj_projekt.cycle.ingest import build_production_stages
 from moj_projekt.cycle.run_cycle import run_cycle
 from moj_projekt.cycle.stages import DEFAULT_STAGES, Stage
+from moj_projekt.domain.budget import (
+    BUDGET_APPROACHING_KEY,
+    BUDGET_CEILING_KEY,
+    CEILING_REACHED_REASON,
+    BudgetPolicy,
+    LLMRunSpendSlice,
+)
 from moj_projekt.domain.cycle_run import CycleRun, CycleRunStatus, StageOutcome
 from moj_projekt.domain.document import Document, ProcessingStatus
+from moj_projekt.domain.enums import CandidateStatus
 from moj_projekt.domain.event import Event
 from moj_projekt.domain.llm_run import LLMRun
 from moj_projekt.domain.repositories import UnitOfWork
@@ -28,6 +37,7 @@ from moj_projekt.extraction.service import ExtractionService
 from moj_projekt.extraction.types import DEFAULT_VALIDATION_CONFIG
 from moj_projekt.llm.client import InferenceParams, LLMResponse, TokenUsage
 from moj_projekt.llm.fake import FakeLLMClient
+from moj_projekt.llm.models import EVENT_EXTRACTION_TASK_TYPE, model_spec_for
 
 _T0 = datetime(2026, 8, 19, 12, 0, 0, tzinfo=UTC)
 _PUBLISHED = datetime(2026, 8, 17, 18, 0, tzinfo=UTC)
@@ -38,6 +48,7 @@ _ZERO_USAGE = TokenUsage(
     cache_creation_input_tokens=0,
     cache_read_input_tokens=0,
 )
+_POLICY = BudgetPolicy(ceiling_usd=Decimal("10"), soft_threshold_ratio=Decimal("0.80"))
 _EXTRACT_MODULE = (
     Path(__file__).resolve().parents[2] / "src" / "moj_projekt" / "cycle" / "extract.py"
 )
@@ -94,9 +105,7 @@ class _FakeDocumentRepository:
     def get(self, document_id: UUID) -> Document | None:
         return next((doc for doc in self.documents if doc.id == document_id), None)
 
-    def list_by_processing_status(
-        self, status: ProcessingStatus, *, limit: int
-    ) -> list[Document]:
+    def list_by_processing_status(self, status: ProcessingStatus, *, limit: int) -> list[Document]:
         matching = [doc for doc in self.documents if doc.processing_status is status]
         matching.sort(key=lambda doc: (doc.collected_at, doc.id or UUID(int=0)))
         return matching[:limit]
@@ -108,9 +117,7 @@ class _FakeDocumentRepository:
         if current is None:
             raise ValueError(f"Document {document_id} does not exist")
         advanced = current.advance_processing_status(new_status)
-        self.documents = [
-            advanced if doc.id == document_id else doc for doc in self.documents
-        ]
+        self.documents = [advanced if doc.id == document_id else doc for doc in self.documents]
         return advanced
 
 
@@ -123,6 +130,32 @@ class _RecordingRepo:
         return item
 
 
+class _FakeLLMRunRepository:
+    def __init__(self, runs: Sequence[LLMRun] | None = None) -> None:
+        self.items: list[LLMRun] = list(runs or [])
+
+    def add(self, llm_run: LLMRun) -> LLMRun:
+        stored = llm_run if llm_run.id is not None else replace(llm_run, id=uuid4())
+        self.items.append(stored)
+        return stored
+
+    def get(self, llm_run_id: UUID) -> LLMRun | None:
+        return next((run for run in self.items if run.id == llm_run_id), None)
+
+    def list_spend_slices(
+        self, *, created_at_from: datetime, created_at_to: datetime
+    ) -> list[LLMRunSpendSlice]:
+        return [
+            LLMRunSpendSlice(
+                model=run.model,
+                token_usage=dict(run.token_usage),
+                created_at=run.created_at,
+            )
+            for run in self.items
+            if created_at_from <= run.created_at < created_at_to
+        ]
+
+
 class _FakeUnitOfWork:
     def __init__(
         self,
@@ -130,7 +163,7 @@ class _FakeUnitOfWork:
         cycle_runs: _FakeCycleRunRepository,
         documents: _FakeDocumentRepository,
         events: _RecordingRepo,
-        llm_runs: _RecordingRepo,
+        llm_runs: _FakeLLMRunRepository,
     ) -> None:
         self.cycle_runs = cycle_runs
         self.documents = documents
@@ -169,8 +202,36 @@ class _ScriptedLLMClient:
         )
 
 
-def _document(
+def _priced_run(
     *,
+    input_tokens: int,
+    output_tokens: int = 0,
+    created_at: datetime = _T0,
+) -> LLMRun:
+    spec = model_spec_for(EVENT_EXTRACTION_TASK_TYPE)
+    return LLMRun(
+        task_type=EVENT_EXTRACTION_TASK_TYPE,
+        provider="anthropic",
+        model=spec.model_id,
+        model_version=spec.model_version,
+        prompt_version="v1",
+        system_prompt_version="v1",
+        input_hash="abc123",
+        input_reference_ids=("document:prior",),
+        output_schema_version="v1",
+        raw_output="{}",
+        validation_status=CandidateStatus.ACCEPTED,
+        created_at=created_at,
+        token_usage={
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+    )
+
+
+def _document(
     suffix: str,
     collected_at: datetime = _T0,
     processing_status: ProcessingStatus = ProcessingStatus.COLLECTED,
@@ -208,7 +269,10 @@ def _run_extract(
     client: FakeLLMClient | _ScriptedLLMClient,
     document_cap: int = 20,
     document_repository: _FakeDocumentRepository | None = None,
-) -> tuple[CycleRun, _FakeDocumentRepository, _RecordingRepo, _RecordingRepo]:
+    llm_runs: _FakeLLMRunRepository | None = None,
+    budget_policy: BudgetPolicy = _POLICY,
+    cycle_times: Sequence[datetime] | None = None,
+) -> tuple[CycleRun, _FakeDocumentRepository, _RecordingRepo, _FakeLLMRunRepository]:
     repo = (
         document_repository
         if document_repository is not None
@@ -216,7 +280,7 @@ def _run_extract(
     )
     cycle_runs = _FakeCycleRunRepository()
     events = _RecordingRepo()
-    llm_runs = _RecordingRepo()
+    stored_runs = llm_runs if llm_runs is not None else _FakeLLMRunRepository()
 
     def factory() -> UnitOfWork:
         return cast(
@@ -225,19 +289,23 @@ def _run_extract(
                 cycle_runs=cycle_runs,
                 documents=repo,
                 events=events,
-                llm_runs=llm_runs,
+                llm_runs=stored_runs,
             ),
         )
 
-    extract = make_extract_stage(service=_service(client), document_cap=document_cap)
-    clock = _FakeClock([_T0, _T0 + timedelta(seconds=1)])
+    extract = make_extract_stage(
+        service=_service(client),
+        document_cap=document_cap,
+        budget_policy=budget_policy,
+    )
+    times = cycle_times if cycle_times is not None else (_T0, _T0 + timedelta(seconds=1))
     result = run_cycle(
-        clock=clock,
+        clock=_FakeClock(times),
         unit_of_work=factory,
         stages=[Stage("ingest", _ok), extract],
     )
     assert result is not None
-    return result, repo, events, llm_runs
+    return result, repo, events, stored_runs
 
 
 def test_populated_queue_writes_events_and_llm_runs_and_advances_status() -> None:
@@ -270,9 +338,7 @@ def test_empty_work_queue_calls_the_client_zero_times() -> None:
 
 
 def test_already_extracted_documents_are_not_retried() -> None:
-    done = _document(
-        suffix="done", processing_status=ProcessingStatus.EVENTS_EXTRACTED
-    )
+    done = _document(suffix="done", processing_status=ProcessingStatus.EVENTS_EXTRACTED)
     client = FakeLLMClient(_FIXTURE.read_bytes())
     result, repo, events, llm_runs = _run_extract(documents=[done], client=client)
 
@@ -359,9 +425,7 @@ def test_one_failing_document_does_not_block_another() -> None:
         [TimeoutError("timed out calling the model"), _FIXTURE.read_bytes()]
     )
 
-    result, repo, events, llm_runs = _run_extract(
-        documents=[failing, ok], client=client
-    )
+    result, repo, events, llm_runs = _run_extract(documents=[failing, ok], client=client)
 
     assert result.status is CycleRunStatus.SUCCEEDED
     assert client.call_count == 2
@@ -441,7 +505,7 @@ def test_stage_level_failure_yields_exactly_one_terminal_cycle_run() -> None:
     cycle_runs = _FakeCycleRunRepository()
     documents = _BoomDocuments()
     events = _RecordingRepo()
-    llm_runs = _RecordingRepo()
+    llm_runs = _FakeLLMRunRepository()
 
     def factory() -> UnitOfWork:
         return cast(
@@ -455,7 +519,7 @@ def test_stage_level_failure_yields_exactly_one_terminal_cycle_run() -> None:
         )
 
     client = FakeLLMClient(_FIXTURE.read_bytes())
-    extract = make_extract_stage(service=_service(client), document_cap=20)
+    extract = make_extract_stage(service=_service(client), document_cap=20, budget_policy=_POLICY)
     result = run_cycle(
         clock=_FakeClock([_T0, _T0 + timedelta(seconds=1)]),
         unit_of_work=factory,
@@ -474,7 +538,7 @@ def test_stage_level_failure_yields_exactly_one_terminal_cycle_run() -> None:
 def test_make_extract_stage_rejects_a_non_positive_cap() -> None:
     client = FakeLLMClient(_FIXTURE.read_bytes())
     with pytest.raises(ValueError, match="document_cap"):
-        make_extract_stage(service=_service(client), document_cap=0)
+        make_extract_stage(service=_service(client), document_cap=0, budget_policy=_POLICY)
 
 
 def test_extract_stage_does_not_read_the_wall_clock() -> None:
@@ -504,9 +568,131 @@ def test_build_production_stages_replaces_ingest_and_extract() -> None:
         adapters={},
         extraction_service=_service(client),
         extract_document_cap=20,
+        budget_policy=_POLICY,
     )
 
     assert [stage.name for stage in stages] == [stage.name for stage in DEFAULT_STAGES]
     assert stages[0].run is not DEFAULT_STAGES[0].run
     assert stages[1].run is not DEFAULT_STAGES[1].run
     assert stages[2].run is DEFAULT_STAGES[2].run
+
+
+def test_ceiling_stops_calls_leaves_documents_collected_and_cycle_succeeds() -> None:
+    document = _document(suffix="queued")
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+    llm_runs = _FakeLLMRunRepository([_priced_run(input_tokens=10_000_000)])
+
+    result, repo, events, stored_runs = _run_extract(
+        documents=[document], client=client, llm_runs=llm_runs
+    )
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 0
+    assert events.items == []
+    assert len(stored_runs.items) == 1
+    assert repo.documents[0].processing_status is ProcessingStatus.COLLECTED
+    outcome = result.source_outcomes[BUDGET_CEILING_KEY]
+    assert outcome == StageOutcome(succeeded=False, failure_reason=CEILING_REACHED_REASON)
+
+
+def test_soft_threshold_is_recorded_and_does_not_change_behaviour() -> None:
+    document = _document(suffix="1")
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+    llm_runs = _FakeLLMRunRepository([_priced_run(input_tokens=8_000_000)])
+
+    result, repo, events, stored_runs = _run_extract(
+        documents=[document], client=client, llm_runs=llm_runs
+    )
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert len(events.items) == 1
+    assert len(stored_runs.items) == 2
+    assert repo.documents[0].processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert result.source_outcomes[BUDGET_APPROACHING_KEY] == StageOutcome(succeeded=True)
+    assert BUDGET_CEILING_KEY not in result.source_outcomes
+
+
+def test_below_soft_threshold_records_nothing_on_the_cycle_run() -> None:
+    document = _document(suffix="1")
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+    llm_runs = _FakeLLMRunRepository([_priced_run(input_tokens=7_000_000)])
+
+    result, repo, events, stored_runs = _run_extract(
+        documents=[document], client=client, llm_runs=llm_runs
+    )
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert repo.documents[0].processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert BUDGET_APPROACHING_KEY not in result.source_outcomes
+    assert BUDGET_CEILING_KEY not in result.source_outcomes
+    assert len(events.items) == 1
+    assert len(stored_runs.items) == 2
+
+
+def test_in_cycle_spend_stops_later_documents_at_the_ceiling() -> None:
+    first = _document(suffix="first", collected_at=_T0 - timedelta(minutes=1))
+    second = _document(suffix="second", collected_at=_T0)
+    client = FakeLLMClient(
+        _FIXTURE.read_bytes(),
+        token_usage=TokenUsage(
+            input_tokens=10_000_000,
+            output_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        ),
+    )
+
+    result, repo, events, stored_runs = _run_extract(documents=[first, second], client=client)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert len(events.items) == 1
+    assert len(stored_runs.items) == 1
+    by_id = {doc.id: doc for doc in repo.documents}
+    assert by_id[first.id].processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert by_id[second.id].processing_status is ProcessingStatus.COLLECTED
+    assert result.source_outcomes[BUDGET_CEILING_KEY].succeeded is False
+
+
+def test_documents_skipped_for_budget_resume_when_the_period_rolls_over() -> None:
+    document = _document(suffix="queued")
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+    llm_runs = _FakeLLMRunRepository([_priced_run(input_tokens=10_000_000, created_at=_T0)])
+    september = datetime(2026, 9, 1, tzinfo=UTC)
+
+    result, repo, events, stored_runs = _run_extract(
+        documents=[document],
+        client=client,
+        llm_runs=llm_runs,
+        cycle_times=(september, september + timedelta(seconds=1)),
+    )
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert len(events.items) == 1
+    assert repo.documents[0].processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert BUDGET_CEILING_KEY not in result.source_outcomes
+    assert len(stored_runs.items) == 2
+
+
+def test_ceiling_soft_threshold_and_cap_are_configuration() -> None:
+    tight = BudgetPolicy(ceiling_usd=Decimal("0.01"), soft_threshold_ratio=Decimal("0.50"))
+    document = _document(suffix="queued")
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+    llm_runs = _FakeLLMRunRepository([_priced_run(input_tokens=20_000)])
+
+    result, repo, _, _ = _run_extract(
+        documents=[document],
+        client=client,
+        llm_runs=llm_runs,
+        budget_policy=tight,
+        document_cap=1,
+    )
+
+    # 20_000 input @ $1/M = $0.02, above a $0.01 ceiling.
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 0
+    assert repo.documents[0].processing_status is ProcessingStatus.COLLECTED
+    assert BUDGET_CEILING_KEY in result.source_outcomes

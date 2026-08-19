@@ -10,10 +10,14 @@ matching the pattern established for Document/EvidencePack immutability
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from moj_projekt.domain.budget import LLMRunSpendSlice
 from moj_projekt.domain.enums import CandidateStatus
 from moj_projekt.domain.llm_run import LLMRun
 from moj_projekt.persistence.models import LLMRunModel
@@ -84,3 +88,25 @@ class SqlAlchemyLLMRunRepository:
     def get(self, llm_run_id: UUID) -> LLMRun | None:
         row = self._session.get(LLMRunModel, llm_run_id)
         return _to_domain(row) if row is not None else None
+
+    def list_spend_slices(
+        self, *, created_at_from: datetime, created_at_to: datetime
+    ) -> Sequence[LLMRunSpendSlice]:
+        rows = self._session.execute(
+            select(
+                LLMRunModel.model,
+                LLMRunModel.token_usage,
+                LLMRunModel.created_at,
+            ).where(
+                LLMRunModel.created_at >= created_at_from,
+                LLMRunModel.created_at < created_at_to,
+            )
+        ).all()
+        return tuple(
+            LLMRunSpendSlice(
+                model=row.model,
+                token_usage=dict(row.token_usage),
+                created_at=row.created_at,
+            )
+            for row in rows
+        )

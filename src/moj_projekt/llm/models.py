@@ -19,6 +19,8 @@ __all__ = [
     "ModelSpec",
     "TASK_MODELS",
     "model_spec_for",
+    "rates_per_million_by_model_id",
+    "spec_for_model_id",
 ]
 
 EVENT_EXTRACTION_TASK_TYPE = "event_extraction"
@@ -67,3 +69,24 @@ def model_spec_for(task_type: str) -> ModelSpec:
         KeyError: if ``task_type`` has no row in ``TASK_MODELS``.
     """
     return TASK_MODELS[task_type]
+
+
+def spec_for_model_id(model_id: str) -> ModelSpec:
+    """Return the rate-table row for the pinned ``model_id`` actually used.
+
+    Cost follows the model on the ``LLMRun``, not the current task-type
+    mapping, so a later remapping does not rewrite historical spend
+    (ADR-0015 clause 3, ADR-0016 clause 3).
+    """
+    for spec in TASK_MODELS.values():
+        if spec.model_id == model_id:
+            return spec
+    raise KeyError(f"no rate table row for model {model_id!r}")
+
+
+def rates_per_million_by_model_id() -> Mapping[str, tuple[float, float]]:
+    """``model_id -> (input_rate_per_million, output_rate_per_million)``."""
+    return {
+        spec.model_id: (spec.input_rate_per_million, spec.output_rate_per_million)
+        for spec in TASK_MODELS.values()
+    }

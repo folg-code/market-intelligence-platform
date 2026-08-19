@@ -19,6 +19,7 @@ from collections.abc import Mapping, Sequence
 
 from moj_projekt.cycle.extract import make_extract_stage
 from moj_projekt.cycle.stages import DEFAULT_STAGES, Stage
+from moj_projekt.domain.budget import BudgetPolicy
 from moj_projekt.domain.cycle_run import CycleRun, StageOutcome
 from moj_projekt.domain.repositories import UnitOfWork
 from moj_projekt.extraction.service import ExtractionService
@@ -51,9 +52,7 @@ def make_ingest_stage(*, adapters: Mapping[str, SourceAdapter]) -> Stage:
                 continue
             for document in documents:
                 uow.documents.add(document)
-            cycle_run = cycle_run.with_source_outcome(
-                source.key, StageOutcome(succeeded=True)
-            )
+            cycle_run = cycle_run.with_source_outcome(source.key, StageOutcome(succeeded=True))
         return cycle_run
 
     return Stage("ingest", run)
@@ -64,12 +63,14 @@ def build_production_stages(
     adapters: Mapping[str, SourceAdapter],
     extraction_service: ExtractionService,
     extract_document_cap: int,
+    budget_policy: BudgetPolicy,
 ) -> Sequence[Stage]:
     """The six ordered stages with real ingest and extract; the rest stay passthrough."""
     ingest = make_ingest_stage(adapters=adapters)
     extract = make_extract_stage(
         service=extraction_service,
         document_cap=extract_document_cap,
+        budget_policy=budget_policy,
     )
     replaced = {"ingest": ingest, "extract": extract}
     return tuple(replaced.get(stage.name, stage) for stage in DEFAULT_STAGES)

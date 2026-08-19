@@ -29,6 +29,7 @@ from sqlalchemy.engine import Engine
 from moj_projekt.config.settings import Settings
 from moj_projekt.cycle.ingest import build_production_stages
 from moj_projekt.cycle.run_cycle import run_cycle
+from moj_projekt.domain.budget import BudgetPolicy
 from moj_projekt.domain.clock import Clock, SystemClock
 from moj_projekt.domain.cycle_run import CycleRun
 from moj_projekt.extraction.service import ExtractionService
@@ -44,6 +45,13 @@ __all__ = ["run_once"]
 _EMPTY_EXTRACTION_RESPONSE = b'{"events": []}'
 
 
+def _budget_policy_from_settings(settings: Settings) -> BudgetPolicy:
+    return BudgetPolicy(
+        ceiling_usd=settings.llm_monthly_ceiling_usd,
+        soft_threshold_ratio=settings.llm_monthly_soft_threshold_ratio,
+    )
+
+
 def run_once(
     engine: Engine,
     *,
@@ -51,6 +59,7 @@ def run_once(
     adapters: Mapping[str, SourceAdapter] | None = None,
     llm_client: LLMClient | None = None,
     extract_document_cap: int | None = None,
+    budget_policy: BudgetPolicy | None = None,
 ) -> CycleRun | None:
     """Run exactly one processing cycle against ``engine``.
 
@@ -62,15 +71,21 @@ def run_once(
     """
     used_clock: Clock = SystemClock() if clock is None else clock
     used_client: LLMClient = (
-        llm_client
-        if llm_client is not None
-        else FakeLLMClient(_EMPTY_EXTRACTION_RESPONSE)
+        llm_client if llm_client is not None else FakeLLMClient(_EMPTY_EXTRACTION_RESPONSE)
     )
-    cap = (
-        extract_document_cap
-        if extract_document_cap is not None
-        else Settings().cycle_extract_document_cap
-    )
+    if extract_document_cap is None or budget_policy is None:
+        loaded = Settings()
+        cap = (
+            extract_document_cap
+            if extract_document_cap is not None
+            else loaded.cycle_extract_document_cap
+        )
+        policy = (
+            budget_policy if budget_policy is not None else _budget_policy_from_settings(loaded)
+        )
+    else:
+        cap = extract_document_cap
+        policy = budget_policy
     extraction_service = ExtractionService(
         client=used_client,
         clock=used_clock,
@@ -85,6 +100,7 @@ def run_once(
             adapters=adapters,
             extraction_service=extraction_service,
             extract_document_cap=cap,
+            budget_policy=policy,
         )
         return run_cycle(
             clock=used_clock,
@@ -101,7 +117,11 @@ def main() -> int:
     settings = Settings()
     engine = create_engine(settings.database_url)
     try:
-        result = run_once(engine, extract_document_cap=settings.cycle_extract_document_cap)
+        result = run_once(
+            engine,
+            extract_document_cap=settings.cycle_extract_document_cap,
+            budget_policy=_budget_policy_from_settings(settings),
+        )
     finally:
         engine.dispose()
 
@@ -109,10 +129,7 @@ def main() -> int:
         print("cycle skipped: another CycleRun is already RUNNING")
         return 0
 
-    print(
-        f"cycle {result.id}: {result.status.name} "
-        f"({result.started_at} -> {result.ended_at})"
-    )
+    print(f"cycle {result.id}: {result.status.name} ({result.started_at} -> {result.ended_at})")
     if result.failure_reason is not None:
         print(f"failure_reason: {result.failure_reason}")
     if result.source_outcomes:
