@@ -3,98 +3,49 @@
 Market Intelligence Platform - evidence-backed market narrative intelligence.
 See `docs/README.md` for the full documentation set.
 
+The operator's path from clone to a stored Document, including PowerShell vs
+bash, is `docs/reference/WORKFLOWS.md`. Do not treat this README as a second
+copy of those commands.
+
 ## Quickstart
 
-### 1. Toolchain (Python environment)
+Python 3.11+, Docker Desktop, then:
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS/Linux
-pip install -e ".[dev]"
-```
+1. `python -m venv .venv` and activate (`.venv\Scripts\Activate.ps1` on
+   Windows, `source .venv/bin/activate` on macOS/Linux).
+2. `pip install -e ".[dev]"`
+3. `pre-commit install --install-hooks` and
+   `pre-commit install --hook-type pre-push`
+4. Copy `.env.example` to `.env` (`Copy-Item` on PowerShell, `cp` on bash).
+   Host-side commands use `localhost:5433`; the `app` container still uses
+   `db:5432`.
+5. `docker compose up -d` then `alembic upgrade head`
+6. `python -m moj_projekt.persistence.seed_sources`
+7. `python -m moj_projekt.cycle.run_once`
 
-### 2. Environment configuration
-
-```bash
-cp .env.example .env
-# then edit .env and set a real POSTGRES_PASSWORD
-```
-
-`.env` is git-ignored; `.env.example` is the only committed template. Typed
-settings are loaded from it via `src/moj_projekt/config/settings.py`
-(ADR-0013) - no `os.environ` read belongs anywhere else in the codebase.
-
-### 3. Bring up the stack
-
-```bash
-docker compose up -d
-```
-
-This starts `db` (PostgreSQL + pgvector, `pgvector/pgvector:pg16`, exposed on
-host port `5433` by default to avoid clashing with a locally installed
-Postgres) and `app` (FastAPI, port `8000`).
-
-### 4. Apply migrations
-
-```bash
-alembic upgrade head
-```
-
-Migrations are an explicit, separate step - they never run on application
-startup (ADR-0013). Run this against the same `.env` values the compose
-stack uses (`db` is reachable at `localhost:5433` from the host, or `db:5432`
-from inside another container).
-
-### 5. Verify
-
-```bash
-curl http://localhost:8000/health
-```
-
-A healthy response looks like:
-
-```json
-{"status": "ok", "database": "ok", "pgvector": "available"}
-```
+`GET http://localhost:8000/health` should report `database: ok` and
+`pgvector: available`. The cycle writes Documents from the live Bloomberg
+Markets RSS feed; Reuters/AP seed URLs fail in isolation and do not fail
+the cycle.
 
 ## Checks
 
-One command runs lint, type-check, and tests:
+`python scripts/check.py` runs `ruff check`, strict `mypy` over `src/`, then
+the unit suite. Default `pytest` excludes `integration`.
 
-```bash
-python scripts/check.py
+Integration tests need the compose database already migrated:
+
+```text
+python -m pytest -m "integration and not network"
 ```
 
-Runs `ruff check`, `mypy` (strict, over `src/`), then `pytest`. Integration
-tests (marker `integration`) require a live database (`docker compose up -d`
-+ `alembic upgrade head`) and are excluded from the default `pytest` run;
-run them explicitly with `pytest -m integration`.
+Live RSS is marked `network` (and `integration`); it needs outbound HTTP and
+is excluded from CI. See `WORKFLOWS.md` for the exact commands.
 
-### Pre-commit hooks (one-time setup)
-
-Right after `pip install -e ".[dev]"`, install the git hooks for both stages
-used by `.pre-commit-config.yaml`:
-
-```bash
-pre-commit install --install-hooks
-pre-commit install --hook-type pre-push
-```
-
-(equivalently, in one call: `pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push`)
-
-Commits then automatically get the hygiene hooks, `ruff check`, and strict
-`mypy` - the same checks `scripts/check.py` and CI run, so nothing that would
-fail CI reaches a commit. Pushes additionally run the DB-free unit test
-suite. Integration tests stay manual/CI-only, since they need a live database:
-`docker compose up -d db` + `alembic upgrade head` + `pytest -m integration`.
-
-Run everything on demand (e.g. first-time setup on an existing clone, or to
-check CI parity) with:
-
-```bash
-pre-commit run --all-files
-```
+CI (`.github/workflows/ci.yml`) runs lint, type-check, and unit + integration
+(`pytest -m "not network"`) on every push/PR into `main` and `sprint/**`.
+Local pre-commit mirrors the DB-free subset: commit gets hygiene + ruff +
+mypy; push gets the unit suite.
 
 ## Status
 
@@ -104,8 +55,4 @@ Sprint 001 ("Foundation to first real document") is in progress. See
 
 ## More
 
-Full documentation: [docs/README.md](docs/README.md). There is no
-`docs/reference/WORKFLOWS.md` yet - this README is the interim source of
-truth for setup/run commands until Sprint 001 task S001-T014 delivers the
-complete workflow guide (covering migrations, source seeding, and running one
-processing cycle manually, none of which exist yet).
+Full documentation: [docs/README.md](docs/README.md).

@@ -4,49 +4,51 @@ Living document - describes the system as it currently is (and, where marked,
 what is planned but not yet built). No approval required; update it whenever a
 component is added, removed, or changed.
 
-Last updated: 2026-08-18 (Sprint 001 tasks S001-T002..T008 merged into
-`sprint/mvp-foundation`)
+Last updated: 2026-08-18 (Sprint 001 through S001-T013 on `sprint/mvp-foundation`)
 
 ## 1. Current state
 
-Sprint 001 is in progress. The toolchain, the Docker Compose stack (`app` +
-`db`), typed settings, the `/health` endpoint, the Alembic migration
-baseline (pgvector extension enabled), Source + Document persistence
-(with immutability and dedupe enforced at the database level), Event +
-EvidencePack persistence (facts/claims kept separate, evidence versioned and
-immutable once written), and Narrative/NarrativeEpisode/NarrativeEvent/
-NarrativeRelation persistence (unique `canonical_key`, the
-`identity_embedding` vector column, non-overlapping episodes, and the
-`evidence_packs.narrative_id` FK deferred from S001-T007) are implemented
-and merged. The processing cycle, ingestion adapters, and the remaining MVP
-entities (impact, alert, LLMRun, AuditEntry) are not yet built. Everything
-below marked *planned* is delivered later in Sprint 001 unless noted.
+Sprint 001 is in progress; the last implementation task (S001-T013) is merged
+and this file reflects that delivered shape. A clone plus compose, migrations,
+and seed yields a running `app` + `db` stack. `GET /health` reports database
+connectivity and pgvector availability. The 5-minute cycle runs in-process on
+APScheduler, is invocable directly via `python -m moj_projekt.cycle.run_once`,
+and persists real Documents from one live RSS source (Bloomberg Markets) with
+per-source failure isolation. Every MVP entity in `DOMAIN_MODEL.md` section 3
+has a table. There are no LLM calls and no dashboard.
+
+How to run it: `docs/reference/WORKFLOWS.md`.
 
 ## 2. Components
 
 | Component | Status | Responsibility |
 |---|---|---|
-| `app` container (FastAPI + APScheduler + processing cycle) | partially implemented - S001-T003 done (FastAPI + `/health`); APScheduler/cycle wiring is S001-T011 | Single process: serves the read path and runs the 5-minute cycle |
+| `app` container (FastAPI + APScheduler + processing cycle) | implemented - S001-T003/T011/T012 | Single process: `/health`, in-process 5-minute cycle, ingest via the RSS adapter. No durable state in the container. |
 | `db` container (PostgreSQL + pgvector) | implemented - S001-T003/T004 | The single system of record, including narrative identity embeddings |
 | Source + Document persistence | implemented - S001-T006 | Immutable, deduplicated ingestion aggregate storage |
-| Event + EvidencePack persistence | implemented - S001-T007 | Extracted events (facts/claims kept separate, ADR-0008) and versioned, immutable evidence snapshots (ADR-0003); `evidence_packs.narrative_id` now has an FK to `narratives.id`, added in S001-T008 |
-| Narrative/NarrativeEpisode/NarrativeEvent/NarrativeRelation persistence | implemented - S001-T008 | The product's central object (unique `canonical_key`), optional/manual-only episodes with no overlap in time (DB `EXCLUDE` constraint), narrative-event assignment (composite PK; the three-condition assignment rule is not yet enforced), and typed narrative-to-narrative relations (self-relations rejected). Carries the `identity_embedding` vector column - see Embedding model source below |
-| Ingestion adapters | planned - S001-T012 (one RSS source; the rest in Sprint 002) | Fetch, normalize, deduplicate source content into Documents |
-| Processing cycle | planned - S001-T011 (skeleton, stages empty) | Ordered stages: ingest, extract, narratives, evidence, state, alerts |
+| Event + EvidencePack persistence | implemented - S001-T007 | Extracted events (facts/claims kept separate, ADR-0008) and versioned, immutable evidence snapshots (ADR-0003); `evidence_packs.narrative_id` has an FK to `narratives.id` (S001-T008) |
+| Narrative/NarrativeEpisode/NarrativeEvent/NarrativeRelation persistence | implemented - S001-T008 | Unique `canonical_key`, optional/manual-only episodes with no overlap in time (DB `EXCLUDE` constraint), narrative-event assignment (composite PK; the three-condition assignment rule is not yet enforced), typed relations (self-relations rejected). Carries `identity_embedding` - see Embedding model source below |
+| NarrativeInstrumentImpact / Alert / LLMRun / AuditEntry persistence | implemented - S001-T009 | Schema and repositories only; nothing writes these in a cycle yet |
+| Source registry seed | implemented - S001-T010 | Idempotent six-source MVP registry (three Tier 1 official, three Tier 2 professional) |
+| Ingestion adapters | implemented for one RSS source - S001-T012 | Fetch, normalize, deduplicate source content into Documents. Remaining adapters (Fed/FOMC, BLS, SEC, further news) are Sprint 002 |
+| Processing cycle | implemented - S001-T011/T012 | Ordered stages: ingest is wired; extract, narratives, evidence, state, alerts are passthrough |
 | Anthropic Claude API (external) | not yet used - Phase 3 | Tiered LLM calls (Haiku/Sonnet/Opus) behind the validation layer |
 | Embedding model source (external or local) | **undecided** - ADR-0014 follow-up | Produces narrative identity embeddings for candidate retrieval. The storage column exists (`narratives.identity_embedding`, `vector(384)`, added S001-T008) but 384 is only a documented placeholder dimension - which model actually produces the embeddings is still an open decision (see `docs/planning/CURRENT_STATUS.md` "Open Decisions"); changing it later is a migration plus a re-embedding pass, not data loss, since the embedding is derived data, never identity |
 | Dashboard (Jinja2 + HTMX) | planned - Phase 7 | Brief, active narratives, instrument exposure, alert feed |
+| CI | implemented - S001-T013 | Lint, strict mypy, unit + integration (not live-network) on every push/PR into `main` and `sprint/**` |
 
 ## 3. Runtime shape
 
 ```text
-[Fed/FOMC, BLS, SEC, news/RSS]
+[Fed/FOMC, BLS, SEC - skipped until adapters exist]
+[news/RSS - Bloomberg Markets live; Reuters/AP seeded but not live]
         | HTTP pull, every 5 minutes (APScheduler, in-process)
+        | or python -m moj_projekt.cycle.run_once
         v
 +-------------------------------+        +------------------------+
 |  app container                | -----> |  Anthropic Claude API  |
-|  FastAPI + scheduler + cycle  |        +------------------------+
-+-------------------------------+
+|  FastAPI + scheduler + cycle  |        |  (not called yet)      |
++-------------------------------+        +------------------------+
         |  SQL (single connection pool)
         v
 +-------------------------------+
@@ -54,26 +56,33 @@ below marked *planned* is delivered later in Sprint 001 unless noted.
 |  PostgreSQL + pgvector        |
 +-------------------------------+
         ^
-        |  HTML + HTMX polling
+        |  HTML + HTMX polling (Phase 7)
    [Trader's browser]
 ```
 
 Two containers, one host, Docker Compose (ADR-0013). No broker, no worker
 process, no separate frontend build (ADR-0005, ADR-0011, ADR-0012).
 
+Host-side Alembic, seed, and `run_once` talk to the published db port
+(5433 by default). The app image does not ship `migrations/` or
+`alembic.ini`, so those commands never run inside the `app` container.
+
 ## 4. Key architectural facts
 
 - One store: PostgreSQL holds relational entities, JSONB payloads, append-only
   audit records, and vectors (ADR-0005 as amended by ADR-0014).
 - One cadence: a single 5-minute cycle produces everything, including alerts
-  (ADR-0004).
-- Alerts are rows written in the same transaction as the change that caused them;
-  the dashboard polls (ADR-0005).
+  (ADR-0004). Alert *rows* are not written yet; the ingest stage is the only
+  stage with a real body.
+- Alerts will be rows written in the same transaction as the change that caused
+  them; the dashboard will poll (ADR-0005).
 - All state is in the database volume; the app container is disposable.
 - Migrations run as an explicit step, never on startup (ADR-0013).
+- A failing source is recorded on the CycleRun and does not fail the cycle.
 
 ## 5. Related
 
 - `docs/vision/ARCHITECTURE_FOUNDATIONS.md` (durable principles and stack)
 - `docs/reference/MODULE_MAP.md` (code layout)
+- `docs/reference/WORKFLOWS.md` (how to run it)
 - `docs/adr/README.md` (decision index)

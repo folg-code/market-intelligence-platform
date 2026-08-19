@@ -6,10 +6,9 @@ assesses impact on NQ / BTC / GOLD - with full traceability.
 
 ## Commands
 
-The toolchain lands in Sprint 001 (task S001-T002/T014); once
-`docs/reference/WORKFLOWS.md` exists it is the single source for setup, compose,
-migrations, seeding, running one cycle, and running checks. Do not duplicate
-those commands here.
+Operational commands (setup, compose, migrations, seed, one cycle, checks)
+live in [`docs/reference/WORKFLOWS.md`](docs/reference/WORKFLOWS.md). Do not
+duplicate them here.
 
 ## Coding conventions for this project
 
