@@ -23,6 +23,8 @@ from moj_projekt.llm.models import (
     EXTRACTION_MODEL_ID,
     ModelSpec,
     model_spec_for,
+    rates_per_million_by_model_id,
+    spec_for_model_id,
 )
 
 if TYPE_CHECKING:
@@ -44,7 +46,9 @@ __all__ = [
     "load_output_schema",
     "load_system_prompt",
     "model_spec_for",
+    "rates_per_million_by_model_id",
     "render_extraction_prompt",
+    "spec_for_model_id",
 ]
 
 

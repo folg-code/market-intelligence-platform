@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -27,6 +28,7 @@ from moj_projekt.cycle.extract import make_extract_stage
 from moj_projekt.cycle.run_cycle import run_cycle
 from moj_projekt.cycle.run_once import run_once
 from moj_projekt.cycle.stages import Stage
+from moj_projekt.domain.budget import BudgetPolicy
 from moj_projekt.domain.clock import Clock
 from moj_projekt.domain.cycle_run import CycleRun, CycleRunStatus
 from moj_projekt.domain.document import Document, ProcessingStatus
@@ -49,6 +51,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "llm" / "extraction_response_v1.json"
 _T0 = datetime(2026, 8, 19, 12, 0, tzinfo=UTC)
 _PUBLISHED = datetime(2026, 8, 17, 18, 0, tzinfo=UTC)
+_POLICY = BudgetPolicy(ceiling_usd=Decimal("10"), soft_threshold_ratio=Decimal("0.80"))
 _ZERO_USAGE = TokenUsage(
     input_tokens=0,
     output_tokens=0,
@@ -165,7 +168,7 @@ def _run_extract_cycle(
         clock=used_clock,
         validation_config=DEFAULT_VALIDATION_CONFIG,
     )
-    extract = make_extract_stage(service=service, document_cap=document_cap)
+    extract = make_extract_stage(service=service, document_cap=document_cap, budget_policy=_POLICY)
     result = run_cycle(
         clock=used_clock,
         unit_of_work=sqlalchemy_unit_of_work_factory(engine),
@@ -193,10 +196,7 @@ def test_populated_queue_writes_events_and_llm_runs_and_advances_exactly_those_d
             assert fetched is not None
             assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED
             run_id = migrated_session.execute(
-                text(
-                    "SELECT id FROM llm_runs "
-                    "WHERE input_reference_ids->>0 = :doc_id"
-                ),
+                text("SELECT id FROM llm_runs WHERE input_reference_ids->>0 = :doc_id"),
                 {"doc_id": str(document.id)},
             ).scalar_one()
             assert run_id is not None
@@ -300,10 +300,7 @@ def _proposed_response() -> bytes:
 def _stored_validation_status(session: Session, document_id: UUID) -> str:
     return str(
         session.execute(
-            text(
-                "SELECT validation_status FROM llm_runs "
-                "WHERE input_reference_ids->>0 = :doc_id"
-            ),
+            text("SELECT validation_status FROM llm_runs WHERE input_reference_ids->>0 = :doc_id"),
             {"doc_id": str(document_id)},
         ).scalar_one()
     )
@@ -442,9 +439,7 @@ def test_processing_status_does_not_regress_after_extract(
     result = _run_extract_cycle(engine, client=client, document_cap=20)
 
     assert result.status is CycleRunStatus.SUCCEEDED
-    with pytest.raises(ValueError, match="cannot regress"), SqlAlchemyUnitOfWork(
-        engine
-    ) as uow:
+    with pytest.raises(ValueError, match="cannot regress"), SqlAlchemyUnitOfWork(engine) as uow:
         uow.documents.advance_processing_status(document_id, ProcessingStatus.COLLECTED)
     with SqlAlchemyUnitOfWork(engine) as uow:
         fetched = uow.documents.get(document_id)

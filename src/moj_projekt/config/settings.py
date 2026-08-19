@@ -9,6 +9,7 @@ is itself backed by `.env`.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic import Field
@@ -47,9 +48,13 @@ class Settings(BaseSettings):
     cycle_interval_seconds: int = 300
     cycle_misfire_grace_seconds: int = 60
     # Per-cycle extract cap (ADR-0015): bounds a single cycle's spend so an
-    # ingest surge cannot consume the monthly ceiling before the T010
-    # budget guard is next evaluated. Must be >= 1.
+    # ingest surge cannot consume the monthly ceiling before the budget
+    # guard is next evaluated. Must be >= 1.
     cycle_extract_document_cap: int = Field(default=20, ge=1)
+    # Monthly LLM cost ceiling and the soft threshold as a fraction of it
+    # (ADR-0015 clause 4). Defaults $10 and 80%. Both are configuration.
+    llm_monthly_ceiling_usd: Decimal = Field(default=Decimal("10"), gt=0)
+    llm_monthly_soft_threshold_ratio: Decimal = Field(default=Decimal("0.80"), gt=0, lt=1)
 
     @property
     def database_url(self) -> str:

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from pydantic import ValidationError
 
@@ -50,5 +52,35 @@ def test_cycle_extract_document_cap_rejects_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CYCLE_EXTRACT_DOCUMENT_CAP", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, postgres_password="secret")  # type: ignore[call-arg]
+
+
+def test_llm_budget_settings_default_to_ten_dollars_and_eighty_percent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_MONTHLY_CEILING_USD", raising=False)
+    monkeypatch.delenv("LLM_MONTHLY_SOFT_THRESHOLD_RATIO", raising=False)
+    settings = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        postgres_password="secret",
+    )
+
+    assert settings.llm_monthly_ceiling_usd == Decimal("10")
+    assert settings.llm_monthly_soft_threshold_ratio == Decimal("0.80")
+
+
+def test_llm_budget_settings_reject_non_positive_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_MONTHLY_CEILING_USD", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, postgres_password="secret")  # type: ignore[call-arg]
+
+
+def test_llm_budget_settings_reject_soft_threshold_of_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_MONTHLY_SOFT_THRESHOLD_RATIO", "1")
     with pytest.raises(ValidationError):
         Settings(_env_file=None, postgres_password="secret")  # type: ignore[call-arg]

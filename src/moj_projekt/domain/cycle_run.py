@@ -83,7 +83,10 @@ class CycleRun:
     (:data:`moj_projekt.cycle.stages.DEFAULT_STAGES`) succeeded.
     ``source_outcomes`` is the per-unit map for isolated work that must
     not fail the cycle: ingest keys it by source key (S001-T012); extract
-    keys per-document transport failures by document id (S002-T009).
+    keys per-document transport failures by document id (S002-T009) and
+    records the monthly budget guard under the well-known keys in
+    :mod:`moj_projekt.domain.budget`. Those budget entries do not fail
+    the cycle.
     ``failure_reason`` is the top-level reason the cycle as a whole is
     ``FAILED`` (e.g. naming which stage raised); it is distinct from any
     individual stage's own ``failure_reason`` in ``stage_outcomes``.
