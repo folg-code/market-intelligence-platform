@@ -16,7 +16,6 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
 
 from moj_projekt.config.settings import Settings, get_settings
 from moj_projekt.cycle.run_once import run_once
@@ -38,18 +37,18 @@ def _create_engine() -> Engine:
 def _run_cycle_job(engine: Engine) -> None:
     """One scheduler tick.
 
-    A fresh ``Session`` per invocation, never one shared across ticks
-    (root ``CLAUDE.md``: "The clock is injected"; ADR-0011 requires the
-    cycle to be resumable and non-overlapping) - APScheduler calls this
-    repeatedly over the app's lifetime, and a long-lived Session would
-    accumulate identity-map/transaction state across unrelated ticks. This
-    delegates to :func:`~moj_projekt.cycle.run_once.run_once`, the exact
-    same orchestration path :mod:`moj_projekt.cycle.run_once`'s direct
+    A fresh unit of work (and therefore session) per stage of the cycle,
+    never one shared across ticks (root ``CLAUDE.md``: "The clock is
+    injected"; ADR-0011 requires the cycle to be resumable and
+    non-overlapping) - APScheduler calls this repeatedly over the app's
+    lifetime, and a long-lived Session would accumulate
+    identity-map/transaction state across unrelated ticks. This delegates
+    to :func:`~moj_projekt.cycle.run_once.run_once`, the exact same
+    orchestration path :mod:`moj_projekt.cycle.run_once`'s direct
     entrypoint and the integration tests use - the scheduler is just one
     more caller of it, not a second code path.
     """
-    with Session(engine) as session:
-        run_once(session)
+    run_once(engine)
 
 
 def build_scheduler(engine: Engine, settings: Settings) -> BackgroundScheduler:

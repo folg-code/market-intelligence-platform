@@ -46,7 +46,7 @@ class SqlAlchemySourceRepository:
             .on_conflict_do_nothing(index_elements=[SourceModel.key])
         )
         self._session.execute(statement)
-        self._session.commit()
+        self._session.flush()
         stored = self._session.get(SourceModel, source.key)
         if stored is None:
             raise RuntimeError(f"Source {source.key!r} missing immediately after upsert")

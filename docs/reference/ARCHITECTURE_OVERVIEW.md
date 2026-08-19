@@ -4,7 +4,7 @@ Living document - describes the system as it currently is (and, where marked,
 what is planned but not yet built). No approval required; update it whenever a
 component is added, removed, or changed.
 
-Last updated: 2026-08-19 (Sprint 001 through S001-T014 on `sprint/mvp-foundation`)
+Last updated: 2026-08-19 (S002-T002 unit of work on `sprint/first-llm-slice`)
 
 ## 1. Current state
 
@@ -78,6 +78,11 @@ Host-side Alembic, seed, and `run_once` talk to the published db port
 - All state is in the database volume; the app container is disposable.
 - Migrations run as an explicit step, never on startup (ADR-0013).
 - A failing source is recorded on the CycleRun and does not fail the cycle.
+- Repositories flush; they do not commit. A unit of work owns the session and
+  the single commit/rollback so later Event + `LLMRun` writes can be one
+  transaction. The cycle opens that boundary per stage (RUNNING is committed
+  first; a failed stage's work rolls back; the terminal CycleRun is written
+  in a following unit of work).
 
 ## 5. Related
 

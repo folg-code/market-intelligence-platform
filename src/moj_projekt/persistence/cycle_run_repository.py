@@ -67,7 +67,7 @@ class SqlAlchemyCycleRunRepository:
             failure_reason=cycle_run.failure_reason,
         )
         self._session.add(row)
-        self._session.commit()
+        self._session.flush()
         self._session.refresh(row)
         return _to_domain(row)
 
@@ -86,7 +86,7 @@ class SqlAlchemyCycleRunRepository:
                 failure_reason=cycle_run.failure_reason,
             )
         )
-        self._session.commit()
+        self._session.flush()
 
         # `execute()` on an UPDATE returns a CursorResult at runtime, which
         # does have `rowcount` - the generic `Result[Any]` return type just

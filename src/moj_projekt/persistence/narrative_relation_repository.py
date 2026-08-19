@@ -47,7 +47,7 @@ class SqlAlchemyNarrativeRelationRepository:
             relation_type=relation.relation_type.value,
         )
         self._session.add(row)
-        self._session.commit()
+        self._session.flush()
         self._session.refresh(row)
         return _to_domain(row)
 

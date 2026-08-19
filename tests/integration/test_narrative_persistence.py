@@ -35,13 +35,7 @@ from moj_projekt.domain.evidence_pack import EvidencePack
 from moj_projekt.domain.narrative import Narrative
 from moj_projekt.domain.narrative_episode import NarrativeEpisode
 from moj_projekt.domain.narrative_relation import NarrativeRelation
-from moj_projekt.persistence.evidence_pack_repository import (
-    SqlAlchemyEvidencePackRepository,
-)
-from moj_projekt.persistence.narrative_episode_repository import (
-    SqlAlchemyNarrativeEpisodeRepository,
-)
-from moj_projekt.persistence.narrative_repository import SqlAlchemyNarrativeRepository
+from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
 
@@ -132,24 +126,27 @@ def test_upgrade_to_head_and_back_round_trips_narrative_tables(
     assert "narratives" not in tables_after_downgrade
 
 
-def test_canonical_key_is_unique(migrated_session: Session) -> None:
-    repo = SqlAlchemyNarrativeRepository(migrated_session)
+def test_canonical_key_is_unique(migrated_session: Session, engine: Engine) -> None:
     narrative = _make_narrative(canonical_key="fed_rate_cut_expectations")
-    repo.add(narrative)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        uow.narratives.add(narrative)
 
-    with pytest.raises(IntegrityError, match="uq_narratives_canonical_key"):
-        repo.add(_make_narrative(canonical_key="fed_rate_cut_expectations"))
-    migrated_session.rollback()
+    with (
+        pytest.raises(IntegrityError, match="uq_narratives_canonical_key"),
+        SqlAlchemyUnitOfWork(engine) as uow,
+    ):
+        uow.narratives.add(_make_narrative(canonical_key="fed_rate_cut_expectations"))
 
 
 def test_narrative_with_null_identity_embedding_is_fully_valid(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repo = SqlAlchemyNarrativeRepository(migrated_session)
     narrative = _make_narrative(identity_embedding=None)
 
-    stored = repo.add(narrative)
-    fetched = repo.get(stored.id)  # type: ignore[arg-type]
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored = uow.narratives.add(narrative)
+        fetched = uow.narratives.get(stored.id)  # type: ignore[arg-type]
 
     assert fetched is not None
     assert fetched.identity_embedding is None
@@ -157,9 +154,13 @@ def test_narrative_with_null_identity_embedding_is_fully_valid(
 
 def test_evidence_packs_narrative_id_has_a_foreign_key_to_narratives(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    with pytest.raises(IntegrityError, match="fk_evidence_packs_narrative_id_narratives"):
-        SqlAlchemyEvidencePackRepository(migrated_session).add(
+    with (
+        pytest.raises(IntegrityError, match="fk_evidence_packs_narrative_id_narratives"),
+        SqlAlchemyUnitOfWork(engine) as uow,
+    ):
+        uow.evidence_packs.add(
             EvidencePack(
                 narrative_id=uuid4(),
                 evidence_version=1,
@@ -169,52 +170,53 @@ def test_evidence_packs_narrative_id_has_a_foreign_key_to_narratives(
                 source_diversity=1,
             )
         )
-    migrated_session.rollback()
 
 
 def test_evidence_pack_stores_against_an_existing_narrative(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
-
-    stored = SqlAlchemyEvidencePackRepository(migrated_session).add(
-        EvidencePack(
-            narrative_id=narrative.id,  # type: ignore[arg-type]
-            evidence_version=1,
-            generated_at=_GENERATED_AT,
-            source_count=1,
-            independent_source_count=1,
-            source_diversity=1,
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
+        stored = uow.evidence_packs.add(
+            EvidencePack(
+                narrative_id=narrative.id,  # type: ignore[arg-type]
+                evidence_version=1,
+                generated_at=_GENERATED_AT,
+                source_count=1,
+                independent_source_count=1,
+                source_diversity=1,
+            )
         )
-    )
 
     assert stored.narrative_id == narrative.id
 
 
 def test_nearest_neighbour_query_over_identity_embedding(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repo = SqlAlchemyNarrativeRepository(migrated_session)
-    close = repo.add(
-        _make_narrative(
-            canonical_key="fed_rate_cut_expectations",
-            identity_embedding=IdentityEmbedding(
-                embedding_model="local-minilm",
-                embedding_version="v1",
-                vector=tuple([1.0, 0.0] + [0.0] * 382),
-            ),
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        close = uow.narratives.add(
+            _make_narrative(
+                canonical_key="fed_rate_cut_expectations",
+                identity_embedding=IdentityEmbedding(
+                    embedding_model="local-minilm",
+                    embedding_version="v1",
+                    vector=tuple([1.0, 0.0] + [0.0] * 382),
+                ),
+            )
         )
-    )
-    far = repo.add(
-        _make_narrative(
-            canonical_key="btc_regulatory_pressure",
-            identity_embedding=IdentityEmbedding(
-                embedding_model="local-minilm",
-                embedding_version="v1",
-                vector=tuple([0.0, 1.0] + [0.0] * 382),
-            ),
+        far = uow.narratives.add(
+            _make_narrative(
+                canonical_key="btc_regulatory_pressure",
+                identity_embedding=IdentityEmbedding(
+                    embedding_model="local-minilm",
+                    embedding_version="v1",
+                    vector=tuple([0.0, 1.0] + [0.0] * 382),
+                ),
+            )
         )
-    )
 
     query_vector = "[" + ",".join(["1.0", "0.0"] + ["0.0"] * 382) + "]"
     rows = migrated_session.execute(
@@ -240,8 +242,11 @@ def test_self_relation_is_rejected_at_the_domain_layer() -> None:
         )
 
 
-def test_self_relation_is_rejected_at_the_database(migrated_session: Session) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
+def test_self_relation_is_rejected_at_the_database(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
 
     # The domain constructor already rejects a self-relation
     # (NarrativeRelation.__post_init__), so exercising the database-level
@@ -259,45 +264,50 @@ def test_self_relation_is_rejected_at_the_database(migrated_session: Session) ->
     migrated_session.rollback()
 
 
-def test_episodes_of_one_narrative_cannot_overlap(migrated_session: Session) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
-    episode_repo = SqlAlchemyNarrativeEpisodeRepository(migrated_session)
-    episode_repo.add(
-        NarrativeEpisode(
-            narrative_id=narrative.id,  # type: ignore[arg-type]
-            started_at=_FIRST_SEEN,
-            ended_at=_FIRST_SEEN + timedelta(days=2),
+def test_episodes_of_one_narrative_cannot_overlap(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
+        uow.narrative_episodes.add(
+            NarrativeEpisode(
+                narrative_id=narrative.id,  # type: ignore[arg-type]
+                started_at=_FIRST_SEEN,
+                ended_at=_FIRST_SEEN + timedelta(days=2),
+            )
         )
-    )
 
-    with pytest.raises(IntegrityError, match="ex_narrative_episodes_no_overlap"):
-        episode_repo.add(
+    with (
+        pytest.raises(IntegrityError, match="ex_narrative_episodes_no_overlap"),
+        SqlAlchemyUnitOfWork(engine) as uow,
+    ):
+        uow.narrative_episodes.add(
             NarrativeEpisode(
                 narrative_id=narrative.id,  # type: ignore[arg-type]
                 started_at=_FIRST_SEEN + timedelta(days=1),
                 ended_at=_FIRST_SEEN + timedelta(days=3),
             )
         )
-    migrated_session.rollback()
 
 
-def test_episodes_of_one_narrative_may_be_sequential(migrated_session: Session) -> None:
-    narrative = SqlAlchemyNarrativeRepository(migrated_session).add(_make_narrative())
-    episode_repo = SqlAlchemyNarrativeEpisodeRepository(migrated_session)
-    episode_repo.add(
-        NarrativeEpisode(
-            narrative_id=narrative.id,  # type: ignore[arg-type]
-            started_at=_FIRST_SEEN,
-            ended_at=_FIRST_SEEN + timedelta(days=1),
+def test_episodes_of_one_narrative_may_be_sequential(
+    migrated_session: Session, engine: Engine
+) -> None:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        narrative = uow.narratives.add(_make_narrative())
+        uow.narrative_episodes.add(
+            NarrativeEpisode(
+                narrative_id=narrative.id,  # type: ignore[arg-type]
+                started_at=_FIRST_SEEN,
+                ended_at=_FIRST_SEEN + timedelta(days=1),
+            )
         )
-    )
-
-    second = episode_repo.add(
-        NarrativeEpisode(
-            narrative_id=narrative.id,  # type: ignore[arg-type]
-            started_at=_FIRST_SEEN + timedelta(days=2),
-            ended_at=None,
+        second = uow.narrative_episodes.add(
+            NarrativeEpisode(
+                narrative_id=narrative.id,  # type: ignore[arg-type]
+                started_at=_FIRST_SEEN + timedelta(days=2),
+                ended_at=None,
+            )
         )
-    )
 
     assert second.ended_at is None

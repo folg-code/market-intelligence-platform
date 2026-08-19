@@ -9,9 +9,10 @@ iterates it uniformly. Production replaces the ingest ``run`` callable via
 stages stay passthrough until later tasks fill them in.
 
 ``Stage.run`` takes the in-progress :class:`~moj_projekt.domain.cycle_run.CycleRun`
-and returns it (possibly with ``source_outcomes`` recorded) so ingest can
-attach per-source results without the orchestration loop knowing about
-sources. Failure of the stage itself is still signalled by raising.
+and the current :class:`~moj_projekt.domain.repositories.UnitOfWork` so a
+stage can write through repositories inside the orchestration-owned
+transaction. It returns the CycleRun (possibly with ``source_outcomes``
+recorded). Failure of the stage itself is still signalled by raising.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from moj_projekt.domain.cycle_run import CycleRun
+from moj_projekt.domain.repositories import UnitOfWork
 
 __all__ = ["Stage", "DEFAULT_STAGES"]
 
@@ -28,19 +30,20 @@ __all__ = ["Stage", "DEFAULT_STAGES"]
 class Stage:
     """One named step of the processing cycle.
 
-    ``run`` receives the in-progress CycleRun and returns it. It signals
-    stage-level failure only by raising, which
-    :func:`~moj_projekt.cycle.run_cycle.run_cycle` catches and records as
-    that stage's :class:`~moj_projekt.domain.cycle_run.StageOutcome`.
-    Per-source ingest failures are *not* stage failures - they are written
-    onto ``CycleRun.source_outcomes`` and the callable returns normally.
+    ``run`` receives the in-progress CycleRun and the stage's unit of
+    work, and returns the CycleRun. It signals stage-level failure only by
+    raising, which :func:`~moj_projekt.cycle.run_cycle.run_cycle` catches
+    and records as that stage's
+    :class:`~moj_projekt.domain.cycle_run.StageOutcome`. Per-source ingest
+    failures are *not* stage failures - they are written onto
+    ``CycleRun.source_outcomes`` and the callable returns normally.
     """
 
     name: str
-    run: Callable[[CycleRun], CycleRun]
+    run: Callable[[CycleRun, UnitOfWork], CycleRun]
 
 
-def _passthrough(cycle_run: CycleRun) -> CycleRun:
+def _passthrough(cycle_run: CycleRun, _uow: UnitOfWork) -> CycleRun:
     """A structurally-real placeholder stage body: no work, succeeds."""
     return cycle_run
 

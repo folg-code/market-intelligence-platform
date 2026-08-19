@@ -4,14 +4,17 @@ Trust bounded contexts.
 Domain code (and anything calling into these contexts) depends on these
 interfaces, never on a SQLAlchemy session directly - "Persistence is reached
 through repository interfaces" (root ``CLAUDE.md``). No SQLAlchemy type
-appears in any signature here (Wave 0 decision D-S001-04); implementations
-live in :mod:`moj_projekt.persistence`.
+appears in any signature here (Wave 0 decision D-S001-04; D-S002-04 clause
+6); implementations live in :mod:`moj_projekt.persistence`. The
+:class:`UnitOfWork` protocol is the caller-owned transaction boundary:
+repository methods flush, they do not commit.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from types import TracebackType
+from typing import Protocol, Self
 from uuid import UUID
 
 from moj_projekt.domain.alert import Alert
@@ -43,6 +46,7 @@ __all__ = [
     "NarrativeRelationRepository",
     "NarrativeRepository",
     "SourceRepository",
+    "UnitOfWork",
 ]
 
 
@@ -298,3 +302,35 @@ class CycleRunRepository(Protocol):
         ``max_instances=1``.
         """
         ...
+
+
+class UnitOfWork(Protocol):
+    """Caller-owned transaction boundary (D-S002-04 clause 6).
+
+    Implementations own session lifecycle and the single commit (clean
+    exit) or rollback (exception). Repository attributes keep the domain
+    interfaces above - nothing here is a SQLAlchemy type.
+    """
+
+    sources: SourceRepository
+    documents: DocumentRepository
+    events: EventRepository
+    evidence_packs: EvidencePackRepository
+    narratives: NarrativeRepository
+    narrative_episodes: NarrativeEpisodeRepository
+    narrative_events: NarrativeEventRepository
+    narrative_relations: NarrativeRelationRepository
+    instrument_impacts: NarrativeInstrumentImpactRepository
+    alerts: AlertRepository
+    llm_runs: LLMRunRepository
+    audit_entries: AuditEntryRepository
+    cycle_runs: CycleRunRepository
+
+    def __enter__(self) -> Self: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...

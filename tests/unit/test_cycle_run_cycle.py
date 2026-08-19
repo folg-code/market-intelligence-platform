@@ -1,6 +1,6 @@
 """Unit tests for the cycle orchestration function (S001-T011) - no
 database. Uses a fake :class:`~moj_projekt.domain.clock.Clock` (fixed,
-incrementing timestamps) and a fake in-memory
+incrementing timestamps) and a fake in-memory unit of work around
 :class:`~moj_projekt.domain.repositories.CycleRunRepository`, exactly the
 injected-dependency seams ``run_cycle`` exists to provide (root
 ``CLAUDE.md``: "The clock is injected... the pipeline is time-sensitive and
@@ -9,9 +9,10 @@ must be testable.").
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,6 +20,7 @@ import pytest
 from moj_projekt.cycle.run_cycle import run_cycle
 from moj_projekt.cycle.stages import Stage
 from moj_projekt.domain.cycle_run import CycleRun, CycleRunStatus, StageOutcome
+from moj_projekt.domain.repositories import UnitOfWork
 
 _T0 = datetime(2026, 8, 18, 12, 0, 0, tzinfo=UTC)
 
@@ -66,16 +68,43 @@ class _FakeCycleRunRepository:
         return list(self._rows.values())
 
 
+class _FakeUnitOfWork:
+    """In-memory unit of work that shares ``cycle_runs`` across opens."""
+
+    def __init__(self, cycle_runs: _FakeCycleRunRepository) -> None:
+        self.cycle_runs = cycle_runs
+
+    def __enter__(self) -> _FakeUnitOfWork:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc: object,
+        traceback: object,
+    ) -> None:
+        return None
+
+
+def _unit_of_work(repository: _FakeCycleRunRepository) -> Callable[[], UnitOfWork]:
+    def factory() -> UnitOfWork:
+        return cast(UnitOfWork, _FakeUnitOfWork(repository))
+
+    return factory
+
+
+def _ok(cycle_run: CycleRun, uow: UnitOfWork) -> CycleRun:
+    del uow
+    return cycle_run
+
+
 def test_run_cycle_reaches_succeeded_with_clock_supplied_timestamps() -> None:
     ended_at = _T0 + timedelta(seconds=3)
     clock = _FakeClock([_T0, ended_at])
     repository = _FakeCycleRunRepository()
-    stages = [
-        Stage("ingest", lambda cycle_run: cycle_run),
-        Stage("extract", lambda cycle_run: cycle_run),
-    ]
+    stages = [Stage("ingest", _ok), Stage("extract", _ok)]
 
-    result = run_cycle(clock=clock, repository=repository, stages=stages)
+    result = run_cycle(clock=clock, unit_of_work=_unit_of_work(repository), stages=stages)
 
     assert result is not None
     assert result.status is CycleRunStatus.SUCCEEDED
@@ -93,12 +122,13 @@ def test_run_cycle_catches_a_raising_stage_and_still_reaches_a_terminal_state() 
     clock = _FakeClock([_T0, ended_at])
     repository = _FakeCycleRunRepository()
 
-    def _boom(cycle_run: CycleRun) -> CycleRun:
+    def _boom(cycle_run: CycleRun, uow: UnitOfWork) -> CycleRun:
+        del cycle_run, uow
         raise RuntimeError("source unavailable")
 
-    stages = [Stage("ingest", _boom), Stage("extract", lambda cycle_run: cycle_run)]
+    stages = [Stage("ingest", _boom), Stage("extract", _ok)]
 
-    result = run_cycle(clock=clock, repository=repository, stages=stages)
+    result = run_cycle(clock=clock, unit_of_work=_unit_of_work(repository), stages=stages)
 
     assert result is not None
     assert result.status is CycleRunStatus.FAILED
@@ -120,10 +150,15 @@ def test_run_cycle_records_exactly_one_cycle_run_even_when_a_stage_raises() -> N
     clock = _FakeClock([_T0, _T0 + timedelta(seconds=1)])
     repository = _FakeCycleRunRepository()
 
-    def _boom(cycle_run: CycleRun) -> CycleRun:
+    def _boom(cycle_run: CycleRun, uow: UnitOfWork) -> CycleRun:
+        del cycle_run, uow
         raise ValueError("boom")
 
-    run_cycle(clock=clock, repository=repository, stages=[Stage("ingest", _boom)])
+    run_cycle(
+        clock=clock,
+        unit_of_work=_unit_of_work(repository),
+        stages=[Stage("ingest", _boom)],
+    )
 
     assert len(repository.all_rows()) == 1
     assert repository.all_rows()[0].status.is_terminal
@@ -135,7 +170,9 @@ def test_run_cycle_no_ops_when_a_run_is_already_in_progress() -> None:
     clock = _FakeClock([_T0])  # would raise StopIteration if now() were called
 
     result = run_cycle(
-        clock=clock, repository=repository, stages=[Stage("ingest", lambda cycle_run: cycle_run)]
+        clock=clock,
+        unit_of_work=_unit_of_work(repository),
+        stages=[Stage("ingest", _ok)],
     )
 
     assert result is None
@@ -149,7 +186,9 @@ def test_run_cycle_no_op_does_not_call_the_clock() -> None:
     clock = _FakeClock([])  # calling now() would raise StopIteration
 
     result = run_cycle(
-        clock=clock, repository=repository, stages=[Stage("ingest", lambda cycle_run: cycle_run)]
+        clock=clock,
+        unit_of_work=_unit_of_work(repository),
+        stages=[Stage("ingest", _ok)],
     )
 
     assert result is None
@@ -160,7 +199,7 @@ def test_run_cycle_defaults_to_the_six_ordered_stages_and_they_all_succeed() -> 
     clock = _FakeClock([_T0, ended_at])
     repository = _FakeCycleRunRepository()
 
-    result = run_cycle(clock=clock, repository=repository)
+    result = run_cycle(clock=clock, unit_of_work=_unit_of_work(repository))
 
     assert result is not None
     assert result.status is CycleRunStatus.SUCCEEDED
@@ -181,14 +220,15 @@ def test_run_cycle_reports_failure_from_any_stage_position(stage_index: int) -> 
     clock = _FakeClock([_T0, _T0 + timedelta(seconds=1)])
     repository = _FakeCycleRunRepository()
 
-    def _boom(cycle_run: CycleRun) -> CycleRun:
+    def _boom(cycle_run: CycleRun, uow: UnitOfWork) -> CycleRun:
+        del cycle_run, uow
         raise RuntimeError("failed here")
 
     stages = list(DEFAULT_STAGES)
     failing_name = stages[stage_index].name
     stages[stage_index] = Stage(failing_name, _boom)
 
-    result = run_cycle(clock=clock, repository=repository, stages=stages)
+    result = run_cycle(clock=clock, unit_of_work=_unit_of_work(repository), stages=stages)
 
     assert result is not None
     assert result.status is CycleRunStatus.FAILED
