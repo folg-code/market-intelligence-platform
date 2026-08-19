@@ -10,7 +10,7 @@ default in `compose.yaml`):
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import cast
@@ -41,6 +41,7 @@ from moj_projekt.domain.repositories import UnitOfWork
 from moj_projekt.domain.source import Source
 from moj_projekt.extraction.service import ExtractionService
 from moj_projekt.extraction.types import DEFAULT_VALIDATION_CONFIG
+from moj_projekt.llm.client import TokenUsage
 from moj_projekt.llm.fake import FakeLLMClient
 from moj_projekt.llm.models import EVENT_EXTRACTION_TASK_TYPE, model_spec_for
 from moj_projekt.persistence.unit_of_work import (
@@ -197,6 +198,13 @@ def _run_extract_cycle(
     return result
 
 
+def _reload_cycle_run(engine: Engine, cycle_run_id: UUID) -> CycleRun:
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        persisted = uow.cycle_runs.get(cycle_run_id)
+    assert persisted is not None
+    return persisted
+
+
 def test_recorded_spend_at_ceiling_makes_zero_calls_and_cycle_succeeds(
     migrated_session: Session, engine: Engine
 ) -> None:
@@ -205,13 +213,16 @@ def test_recorded_spend_at_ceiling_makes_zero_calls_and_cycle_succeeds(
     client = FakeLLMClient(_FIXTURE.read_bytes())
 
     result = _run_extract_cycle(engine, client=client)
+    persisted = _reload_cycle_run(engine, cast(UUID, result.id))
 
     assert result.status is CycleRunStatus.SUCCEEDED
+    assert persisted.status is CycleRunStatus.SUCCEEDED
+    assert persisted.failure_reason is None
     assert client.call_count == 0
     assert _count(migrated_session, "events") == 0
     assert _count(migrated_session, "llm_runs") == 1
-    assert result.source_outcomes[BUDGET_CEILING_KEY].succeeded is False
-    assert result.source_outcomes[BUDGET_CEILING_KEY].failure_reason == (CEILING_REACHED_REASON)
+    assert persisted.source_outcomes[BUDGET_CEILING_KEY].succeeded is False
+    assert persisted.source_outcomes[BUDGET_CEILING_KEY].failure_reason == (CEILING_REACHED_REASON)
     with SqlAlchemyUnitOfWork(engine) as uow:
         fetched = uow.documents.get(cast(UUID, stored[0].id))
     assert fetched is not None
@@ -260,3 +271,68 @@ def test_skipped_documents_resume_when_the_budget_period_rolls_over(
         fetched = uow.documents.get(cast(UUID, stored[0].id))
     assert fetched is not None
     assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+
+
+def test_in_cycle_spend_stops_later_documents_before_the_next_call(
+    migrated_session: Session, engine: Engine
+) -> None:
+    """Guard is consulted before each call; flushed in-cycle LLMRun rows count."""
+    first = _document(suffix="first", collected_at=_T0 - timedelta(minutes=1))
+    second = _document(suffix="second", collected_at=_T0)
+    stored = _persist_documents(engine, [first, second])
+    client = FakeLLMClient(
+        _FIXTURE.read_bytes(),
+        token_usage=TokenUsage(
+            input_tokens=10_000_000,
+            output_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        ),
+    )
+
+    result = _run_extract_cycle(engine, client=client)
+    persisted = _reload_cycle_run(engine, cast(UUID, result.id))
+
+    assert persisted.status is CycleRunStatus.SUCCEEDED
+    assert persisted.failure_reason is None
+    assert client.call_count == 1
+    assert _count(migrated_session, "events") == 1
+    assert _count(migrated_session, "llm_runs") == 1
+    assert persisted.source_outcomes[BUDGET_CEILING_KEY].failure_reason == (CEILING_REACHED_REASON)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        extracted = uow.documents.get(cast(UUID, stored[0].id))
+        queued = uow.documents.get(cast(UUID, stored[1].id))
+    assert extracted is not None
+    assert queued is not None
+    assert extracted.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert queued.processing_status is ProcessingStatus.COLLECTED
+
+
+def test_configured_ceiling_and_cap_are_not_hard_coded(
+    migrated_session: Session, engine: Engine
+) -> None:
+    stored = _persist_documents(
+        engine,
+        [
+            _document(suffix="queued-a", collected_at=_T0 - timedelta(minutes=1)),
+            _document(suffix="queued-b", collected_at=_T0),
+        ],
+    )
+    # 20_000 input @ $1/M = $0.02, above a $0.01 ceiling.
+    _persist_run(engine, _priced_run(input_tokens=20_000))
+    tight = BudgetPolicy(ceiling_usd=Decimal("0.01"), soft_threshold_ratio=Decimal("0.50"))
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+
+    result = _run_extract_cycle(engine, client=client, document_cap=1, budget_policy=tight)
+    persisted = _reload_cycle_run(engine, cast(UUID, result.id))
+
+    assert persisted.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 0
+    assert _count(migrated_session, "events") == 0
+    assert BUDGET_CEILING_KEY in persisted.source_outcomes
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        first_doc = uow.documents.get(cast(UUID, stored[0].id))
+        second_doc = uow.documents.get(cast(UUID, stored[1].id))
+    assert first_doc is not None and second_doc is not None
+    assert first_doc.processing_status is ProcessingStatus.COLLECTED
+    assert second_doc.processing_status is ProcessingStatus.COLLECTED

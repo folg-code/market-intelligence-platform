@@ -70,6 +70,19 @@ def test_llm_budget_settings_default_to_ten_dollars_and_eighty_percent(
     assert settings.llm_monthly_soft_threshold_ratio == Decimal("0.80")
 
 
+def test_llm_budget_settings_read_custom_values_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_MONTHLY_CEILING_USD", "5")
+    monkeypatch.setenv("LLM_MONTHLY_SOFT_THRESHOLD_RATIO", "0.5")
+    monkeypatch.setenv("CYCLE_EXTRACT_DOCUMENT_CAP", "3")
+    settings = Settings(_env_file=None, postgres_password="secret")  # type: ignore[call-arg]
+
+    assert settings.llm_monthly_ceiling_usd == Decimal("5")
+    assert settings.llm_monthly_soft_threshold_ratio == Decimal("0.5")
+    assert settings.cycle_extract_document_cap == 3
+
+
 def test_llm_budget_settings_reject_non_positive_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

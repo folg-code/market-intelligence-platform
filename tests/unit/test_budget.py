@@ -5,8 +5,10 @@ No database, no network: pure functions over token counts and rates.
 
 from __future__ import annotations
 
+import ast
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +25,9 @@ from moj_projekt.domain.budget import (
 from moj_projekt.llm.models import EVENT_EXTRACTION_TASK_TYPE, model_spec_for
 
 _T0 = datetime(2026, 8, 19, 12, 0, tzinfo=UTC)
+_BUDGET_MODULE = (
+    Path(__file__).resolve().parents[2] / "src" / "moj_projekt" / "domain" / "budget.py"
+)
 
 
 def _policy(
@@ -169,3 +174,24 @@ def test_projected_monthly_cost_at_observed_document_rate_is_under_the_ceiling()
     assert per_document == Decimal("0.005")
     assert projected == Decimal("4.500")
     assert projected < ceiling
+
+
+def test_budget_module_does_not_read_the_wall_clock() -> None:
+    tree = ast.parse(_BUDGET_MODULE.read_text(encoding="utf-8"), filename=str(_BUDGET_MODULE))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr not in {"now", "utcnow"}:
+            continue
+        value = func.value
+        if isinstance(value, ast.Name) and value.id == "datetime":
+            raise AssertionError(
+                f"domain/budget.py calls datetime.{func.attr}() at line {node.lineno}"
+            )
+        if isinstance(value, ast.Attribute) and value.attr == "datetime":
+            raise AssertionError(
+                f"domain/budget.py calls datetime.{func.attr}() at line {node.lineno}"
+            )
