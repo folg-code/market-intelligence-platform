@@ -274,7 +274,9 @@ class CycleRunRepository(Protocol):
     (:meth:`add`), then once more with its terminal state
     (:meth:`update`) - there is no in-between write, so no "advance one
     field" method is needed the way
-    :meth:`DocumentRepository.advance_processing_status` is.
+    :meth:`DocumentRepository.advance_processing_status` is. After that
+    second write the row is frozen: a further UPDATE is rejected at the
+    database (migration ``0007``).
     """
 
     def add(self, cycle_run: CycleRun) -> CycleRun:

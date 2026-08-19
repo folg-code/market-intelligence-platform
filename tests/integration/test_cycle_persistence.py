@@ -1,5 +1,5 @@
 """Integration tests for the CycleRun record and cycle orchestration
-(S001-T011).
+(S001-T011, S002-T004).
 
 Run with the `db` service up and its port published to the host (the
 default in `compose.yaml`):
@@ -9,11 +9,12 @@ default in `compose.yaml`):
 
 Exercises the actual acceptance criteria: two consecutive calls to the
 direct entrypoint each produce exactly one terminal CycleRun row (no
-overlap artifacts), and the database-level "at most one RUNNING row"
-constraint (and the CHECK constraints mirroring CycleRun's own invariants)
-reject rows a raw INSERT tries to sneak past the domain constructor -
-mirroring the S001-T009 pattern of testing DB-level backstops directly with
-`text(...)` SQL.
+overlap artifacts); a second UPDATE of a terminal row is rejected by a
+database trigger (PRB-004); and the database-level "at most one RUNNING
+row" constraint (and the CHECK constraints mirroring CycleRun's own
+invariants) reject rows a raw INSERT tries to sneak past the domain
+constructor - mirroring the S001-T009 pattern of testing DB-level
+backstops directly with `text(...)` SQL.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from moj_projekt.config.settings import Settings
@@ -38,6 +39,8 @@ pytestmark = pytest.mark.integration
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _STARTED_AT = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
+_TERMINAL_IMMUTABILITY_TRIGGER = "cycle_runs_reject_terminal_update_trigger"
+_TERMINAL_IMMUTABILITY_FUNCTION = "cycle_runs_reject_terminal_update"
 
 
 @pytest.fixture
@@ -152,6 +155,101 @@ def test_repository_add_get_running_and_update_round_trip(
         assert fetched is not None
         assert fetched.ended_at == ended_at
         assert fetched.status is CycleRunStatus.SUCCEEDED
+
+
+def _terminal_immutability_trigger_exists(db_engine: Engine) -> bool:
+    with db_engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT 1 FROM pg_trigger WHERE tgname = :name AND NOT tgisinternal"),
+            {"name": _TERMINAL_IMMUTABILITY_TRIGGER},
+        ).first()
+    return row is not None
+
+
+def _terminal_immutability_function_exists(db_engine: Engine) -> bool:
+    with db_engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT 1 FROM pg_proc WHERE proname = :name"),
+            {"name": _TERMINAL_IMMUTABILITY_FUNCTION},
+        ).first()
+    return row is not None
+
+
+def test_second_update_of_a_terminal_cycle_run_is_rejected_at_the_database(
+    migrated_session: Session,
+) -> None:
+    repository = SqlAlchemyCycleRunRepository(migrated_session)
+    created = repository.add(CycleRun(started_at=_STARTED_AT))
+    ended_at = _STARTED_AT + timedelta(seconds=5)
+    finished = created.finish(status=CycleRunStatus.SUCCEEDED, ended_at=ended_at)
+    updated = repository.update(finished)
+
+    with pytest.raises(DBAPIError, match="cycle_runs: terminal rows cannot be updated"):
+        repository.update(updated)
+    migrated_session.rollback()
+
+    # Raw SQL too: the rejection is the trigger, not Python-side finish().
+    with pytest.raises(DBAPIError, match="cycle_runs: terminal rows cannot be updated"):
+        migrated_session.execute(
+            text("UPDATE cycle_runs SET stage_outcomes = '{}'::jsonb WHERE id = :id"),
+            {"id": updated.id},
+        )
+        migrated_session.commit()
+    migrated_session.rollback()
+
+    fetched = repository.get(created.id)
+    assert fetched is not None
+    assert fetched.status is CycleRunStatus.SUCCEEDED
+    assert fetched.ended_at == ended_at
+
+
+def test_failed_terminal_cycle_run_is_also_immutable_at_the_database(
+    migrated_session: Session,
+) -> None:
+    migrated_session.execute(
+        text(
+            "INSERT INTO cycle_runs (started_at, ended_at, status, failure_reason) "
+            "VALUES (now(), now(), 3, 'stage raised')"
+        )
+    )
+    migrated_session.commit()
+
+    with pytest.raises(DBAPIError, match="cycle_runs: terminal rows cannot be updated"):
+        migrated_session.execute(
+            text("UPDATE cycle_runs SET failure_reason = 'changed' WHERE status = 3")
+        )
+        migrated_session.commit()
+    migrated_session.rollback()
+
+
+def test_terminal_immutability_trigger_round_trips_upgrade_downgrade_upgrade(
+    alembic_config: Config, engine: Engine
+) -> None:
+    try:
+        command.upgrade(alembic_config, "head")
+        assert _terminal_immutability_trigger_exists(engine)
+        assert _terminal_immutability_function_exists(engine)
+
+        command.downgrade(alembic_config, "0006")
+        assert not _terminal_immutability_trigger_exists(engine)
+        assert not _terminal_immutability_function_exists(engine)
+        with engine.connect() as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = 'public'"
+                    )
+                )
+            }
+        assert "cycle_runs" in tables
+
+        command.upgrade(alembic_config, "head")
+        assert _terminal_immutability_trigger_exists(engine)
+        assert _terminal_immutability_function_exists(engine)
+    finally:
+        command.downgrade(alembic_config, "base")
 
 
 def test_second_running_row_is_rejected_by_the_database(

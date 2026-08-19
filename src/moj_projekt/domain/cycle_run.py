@@ -10,7 +10,8 @@ cross-row invariant this type cannot check on its own (mirroring
 rule); it is enforced by the orchestration function reading
 :meth:`~moj_projekt.domain.repositories.CycleRunRepository.get_running`
 before starting a new run, and independently by a database constraint (see
-migration ``0006``).
+migration ``0006``). Once the row is terminal, a further UPDATE is rejected
+at the database (migration ``0007``).
 """
 
 from __future__ import annotations

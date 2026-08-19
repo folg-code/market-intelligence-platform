@@ -3,10 +3,10 @@
 
 Two writes per cycle, not one: :meth:`add` inserts the ``RUNNING`` row when
 a cycle starts, :meth:`update` overwrites it in place with its terminal
-state - there is no immutability/append-only rule for this table (unlike
-``llm_runs``/``audit_entries``), because the whole point of the record is
-to observe a run *while* it is still in progress
-(:meth:`get_running`, the data-level overlap guard from ADR-0011).
+state. The row is observable while it is still in progress
+(:meth:`get_running`, the data-level overlap guard from ADR-0011); once
+terminal, the ``cycle_runs_reject_terminal_update_trigger`` from migration
+``0007`` rejects any further UPDATE (PRB-004).
 """
 
 from __future__ import annotations
