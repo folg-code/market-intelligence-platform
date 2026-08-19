@@ -12,6 +12,7 @@ import pytest
 
 from moj_projekt.domain.document import Document
 from moj_projekt.domain.enums import CandidateStatus
+from moj_projekt.domain.llm_run import LLMRun
 from moj_projekt.extraction.service import (
     EXTRACTION_MAX_TOKENS,
     EXTRACTION_PROVIDER,
@@ -56,6 +57,21 @@ class _FixedClock:
 
     def now(self) -> datetime:
         return self._at
+
+
+class _RecordingRepo:
+    def __init__(self) -> None:
+        self.items: list[object] = []
+
+    def add(self, item: object) -> object:
+        self.items.append(item)
+        return item
+
+
+class _RecordingUow:
+    def __init__(self) -> None:
+        self.llm_runs = _RecordingRepo()
+        self.events = _RecordingRepo()
 
 
 def _document(**overrides: object) -> Document:
@@ -226,3 +242,29 @@ def test_document_context_from_document_keeps_published_at() -> None:
     context = DocumentContext(document_id=document.id, published_at=document.published_at)
     assert context.document_id == _DOCUMENT_ID
     assert context.published_at == _PUBLISHED
+
+
+def test_extract_does_not_write_events_when_validator_rejects_schema_valid_output() -> None:
+    """The model can emit a well-formed Event; the T007 verdict still governs writes."""
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload["events"][0]["title"] = "Federal Reserve forecast of an unchanged rate"
+    raw = json.dumps(payload)
+    client = FakeLLMClient(raw.encode("utf-8"))
+    service = ExtractionService(
+        client=client,
+        clock=_FixedClock(_T0),
+        validation_config=_CONFIG,
+    )
+    uow = _RecordingUow()
+
+    outcome = service.extract(_document(), uow)  # type: ignore[arg-type]
+
+    assert outcome.verdict is CandidateStatus.REJECTED
+    assert outcome.events == ()
+    assert client.call_count == 1
+    assert len(uow.events.items) == 0
+    assert len(uow.llm_runs.items) == 1
+    stored_run = uow.llm_runs.items[0]
+    assert isinstance(stored_run, LLMRun)
+    assert stored_run.raw_output == raw
+    assert stored_run.validation_status is CandidateStatus.REJECTED

@@ -24,11 +24,16 @@ from moj_projekt.domain.document import Document
 from moj_projekt.domain.enums import CandidateStatus, SourceTier
 from moj_projekt.domain.repositories import UnitOfWork
 from moj_projekt.domain.source import Source
-from moj_projekt.extraction.service import ExtractionService
-from moj_projekt.extraction.types import ValidationConfig
+from moj_projekt.extraction.service import (
+    ExtractionService,
+    document_text_for_extraction,
+    hash_extraction_input,
+)
+from moj_projekt.extraction.types import ValidationConfig, ValidationErrorCode
+from moj_projekt.llm.artifacts import render_extraction_prompt
 from moj_projekt.llm.client import TokenUsage
 from moj_projekt.llm.fake import FakeLLMClient
-from moj_projekt.llm.models import EXTRACTION_MODEL_ID
+from moj_projekt.llm.models import EVENT_EXTRACTION_TASK_TYPE, EXTRACTION_MODEL_ID
 from moj_projekt.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 pytestmark = pytest.mark.integration
@@ -142,17 +147,24 @@ def _persist_document(engine: Engine) -> Document:
         return uow.documents.add(_document())
 
 
-def _service(raw: str, *, usage: TokenUsage | None = None) -> ExtractionService:
+def _service_with_client(
+    raw: str, *, usage: TokenUsage | None = None
+) -> tuple[ExtractionService, FakeLLMClient]:
     client = FakeLLMClient(
         raw.encode("utf-8"),
         token_usage=usage,
         latency_seconds=0.42,
     )
-    return ExtractionService(
+    service = ExtractionService(
         client=client,
         clock=_FixedClock(),
         validation_config=_CONFIG,
     )
+    return service, client
+
+
+def _service(raw: str, *, usage: TokenUsage | None = None) -> ExtractionService:
+    return _service_with_client(raw, usage=usage)[0]
 
 
 def _accepted_event(**overrides: object) -> dict[str, object]:
@@ -173,7 +185,7 @@ def test_accepted_yields_event_and_one_llm_run_after_commit(
         cache_read_input_tokens=0,
     )
     raw = _FIXTURE.read_text(encoding="utf-8")
-    service = _service(raw, usage=usage)
+    service, client = _service_with_client(raw, usage=usage)
 
     with SqlAlchemyUnitOfWork(engine) as uow:
         outcome = service.extract(document, uow)
@@ -181,8 +193,12 @@ def test_accepted_yields_event_and_one_llm_run_after_commit(
     assert outcome.verdict is CandidateStatus.ACCEPTED
     assert len(outcome.events) == 1
     assert outcome.llm_run.id is not None
+    assert client.call_count == 1
     event_id = outcome.events[0].id
     run_id = outcome.llm_run.id
+    expected_hash = hash_extraction_input(
+        render_extraction_prompt(document_text_for_extraction(document))
+    )
 
     with SqlAlchemyUnitOfWork(engine) as uow:
         stored_event = uow.events.get(event_id)  # type: ignore[arg-type]
@@ -195,8 +211,13 @@ def test_accepted_yields_event_and_one_llm_run_after_commit(
     assert stored_run.raw_output == raw
     assert stored_run.validation_status is CandidateStatus.ACCEPTED
     assert stored_run.model == EXTRACTION_MODEL_ID
-    assert "latest" not in stored_run.model.lower()
-    assert stored_run.input_hash
+    assert stored_run.model_version == "20251001"
+    assert stored_run.task_type == EVENT_EXTRACTION_TASK_TYPE
+    assert stored_run.provider == "anthropic"
+    assert stored_run.prompt_version == "v1"
+    assert stored_run.system_prompt_version == "v1"
+    assert stored_run.output_schema_version == "v1"
+    assert stored_run.input_hash == expected_hash
     assert referenced is not None
     assert referenced.id == document.id
     assert stored_run.token_usage["input_tokens"] == 10
@@ -205,6 +226,30 @@ def test_accepted_yields_event_and_one_llm_run_after_commit(
     assert stored_run.created_at == _T0
     assert _count(migrated_session, "events") == 1
     assert _count(migrated_session, "llm_runs") == 1
+
+    constraint_name = migrated_session.execute(
+        text("SELECT conname FROM pg_constraint WHERE conname = 'ck_llm_runs_no_latest_alias'")
+    ).scalar_one()
+    assert constraint_name == "ck_llm_runs_no_latest_alias"
+    passes_no_latest = migrated_session.execute(
+        text(
+            "SELECT trim(lower(model)) <> 'latest' "
+            "AND trim(lower(model_version)) <> 'latest' "
+            "FROM llm_runs WHERE id = CAST(:id AS uuid)"
+        ),
+        {"id": str(run_id)},
+    ).scalar_one()
+    assert passes_no_latest is True
+    joined_document_id = migrated_session.execute(
+        text(
+            "SELECT d.id FROM llm_runs r "
+            "INNER JOIN documents d "
+            "ON d.id = CAST(r.input_reference_ids->>0 AS uuid) "
+            "WHERE r.id = CAST(:id AS uuid)"
+        ),
+        {"id": str(run_id)},
+    ).scalar_one()
+    assert joined_document_id == document.id
 
 
 def test_proposed_yields_llm_run_and_zero_events(
@@ -229,6 +274,43 @@ def test_proposed_yields_llm_run_and_zero_events(
     assert stored_run.raw_output == raw
     assert stored_run.validation_errors
     assert stored_run.input_reference_ids == (str(document.id),)
+    assert _count(migrated_session, "events") == 0
+    assert _count(migrated_session, "llm_runs") == 1
+
+
+def test_schema_valid_hard_reject_yields_llm_run_and_zero_events(
+    migrated_session: Session, engine: Engine
+) -> None:
+    """A parseable Event that fails a T007 hard rule must not be persisted.
+
+    Unparseable JSON would also yield zero Events without consulting the
+    validator; this payload is schema-valid so a path that wrote Events
+    straight from the model would create a row.
+    """
+    document = _persist_document(engine)
+    raw = json.dumps(
+        {"events": [_accepted_event(title="Federal Reserve forecast of an unchanged rate")]}
+    )
+    service, client = _service_with_client(raw)
+
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        outcome = service.extract(document, uow)
+
+    assert outcome.verdict is CandidateStatus.REJECTED
+    assert outcome.events == ()
+    assert client.call_count == 1
+    run_id = outcome.llm_run.id
+
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        stored_run = uow.llm_runs.get(run_id)  # type: ignore[arg-type]
+
+    assert stored_run is not None
+    assert stored_run.raw_output == raw
+    assert stored_run.validation_status is CandidateStatus.REJECTED
+    assert any(
+        ValidationErrorCode.FORBIDDEN_VOCABULARY in error
+        for error in stored_run.validation_errors
+    )
     assert _count(migrated_session, "events") == 0
     assert _count(migrated_session, "llm_runs") == 1
 
