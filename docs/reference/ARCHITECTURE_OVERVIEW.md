@@ -4,11 +4,11 @@ Living document - describes the system as it currently is (and, where marked,
 what is planned but not yet built). No approval required; update it whenever a
 component is added, removed, or changed.
 
-Last updated: 2026-08-19 (S002-T009 cycle extract stage on `sprint/first-llm-slice`)
+Last updated: 2026-08-19 (S002-T010 monthly budget guard on `sprint/first-llm-slice`)
 
 ## 1. Current state
 
-Sprint 001 is delivered through T014; Sprint 002 through T009 is on
+Sprint 001 is delivered through T014; Sprint 002 through T010 is on
 `sprint/first-llm-slice`. A clone plus compose, migrations, and seed yields a running `app` + `db` stack.
 `GET /health` reports database connectivity and pgvector availability. The 5-minute cycle runs in-process on
 APScheduler, is invocable directly via `python -m moj_projekt.cycle.run_once`,
@@ -18,10 +18,13 @@ has a table. There is no dashboard. The deterministic extraction validator
 (`extraction/`) exists as a library. `ExtractionService` persists Event +
 `LLMRun` in one unit of work. The cycle extract stage is wired: it drains
 `COLLECTED` Documents (oldest first, `CYCLE_EXTRACT_DOCUMENT_CAP` default 20)
-and advances a terminal verdict to `EVENTS_EXTRACTED`. Default `run_once`
-still uses `FakeLLMClient` (empty events) until T011; Anthropic is not
-called. The monthly budget guard is T010 and is not built. Narratives,
-evidence, state, and alerts remain passthrough.
+and advances a terminal verdict to `EVENTS_EXTRACTED`. Before each call it
+consults the monthly budget guard (UTC month of `CycleRun.started_at`,
+spend from recorded `token_usage` vs `llm/models.py` rates). At the ceiling
+there are no further calls; the cycle still `SUCCEEDED` and skipped
+Documents stay `COLLECTED`. Default `run_once` still uses `FakeLLMClient`
+(empty events) until T011; Anthropic is not called. Narratives, evidence,
+state, and alerts remain passthrough.
 
 How to run it: `docs/reference/WORKFLOWS.md`.
 
@@ -29,7 +32,7 @@ How to run it: `docs/reference/WORKFLOWS.md`.
 
 | Component | Status | Responsibility |
 |---|---|---|
-| `app` container (FastAPI + APScheduler + processing cycle) | implemented - S001-T003/T011/T012, S002-T009 | Single process: `/health`, in-process 5-minute cycle, ingest via the RSS adapter, extract via `ExtractionService` (`FakeLLMClient` until T011). No durable state in the container. |
+| `app` container (FastAPI + APScheduler + processing cycle) | implemented - S001-T003/T011/T012, S002-T009/T010 | Single process: `/health`, in-process 5-minute cycle, ingest via the RSS adapter, extract via `ExtractionService` (`FakeLLMClient` until T011) with the monthly budget guard. No durable state in the container. |
 | `db` container (PostgreSQL + pgvector) | implemented - S001-T003/T004 | The single system of record, including narrative identity embeddings |
 | Source + Document persistence | implemented - S001-T006 | Immutable, deduplicated ingestion aggregate storage |
 | Event + EvidencePack persistence | implemented - S001-T007 | Extracted events (facts/claims kept separate, ADR-0008) and versioned, immutable evidence snapshots (ADR-0003); `evidence_packs.narrative_id` has an FK to `narratives.id` (S001-T008) |
@@ -37,7 +40,7 @@ How to run it: `docs/reference/WORKFLOWS.md`.
 | NarrativeInstrumentImpact / Alert / LLMRun / AuditEntry persistence | implemented - S001-T009; LLMRun writes S002-T008/T009 | Schema and repositories. Cycle extract invokes `ExtractionService`, which writes `LLMRun` (always) and Event rows (on `accepted` only). Alert, impact, and AuditEntry remain unused in a cycle |
 | Source registry seed | implemented - S001-T010 | Idempotent six-source MVP registry (three Tier 1 official, three Tier 2 professional) |
 | Ingestion adapters | implemented for one RSS source - S001-T012 | Fetch, normalize, deduplicate source content into Documents. Remaining adapters (Fed/FOMC, BLS, SEC, further news) are Sprint 002 |
-| Processing cycle | implemented - S001-T011/T012, S002-T009 | Ordered stages: ingest and extract are wired; narratives, evidence, state, alerts are passthrough. Extract: `COLLECTED` oldest-first, cap `CYCLE_EXTRACT_DOCUMENT_CAP` (default 20); terminal verdict -> `EVENTS_EXTRACTED` (extraction attempted, not "an Event exists"); transport failure stays `COLLECTED` and is recorded on CycleRun. Empty queue: zero LLM calls. Monthly budget guard is T010 |
+| Processing cycle | implemented - S001-T011/T012, S002-T009/T010 | Ordered stages: ingest and extract are wired; narratives, evidence, state, alerts are passthrough. Extract: `COLLECTED` oldest-first, cap `CYCLE_EXTRACT_DOCUMENT_CAP` (default 20); terminal verdict -> `EVENTS_EXTRACTED` (extraction attempted, not "an Event exists"); transport failure stays `COLLECTED` and is recorded on CycleRun. Empty queue: zero LLM calls. Monthly budget guard: spend from `llm_runs.token_usage` vs rate table for the UTC month of `CycleRun.started_at`; at ceiling (`LLM_MONTHLY_CEILING_USD` default $10) zero further calls, cycle `SUCCEEDED`, docs stay `COLLECTED`; soft threshold (`LLM_MONTHLY_SOFT_THRESHOLD_RATIO` default 0.80) recorded only |
 | Extraction validator | implemented - S002-T007 | Parser + deterministic rules producing `accepted` / `proposed` / `rejected` (ADR-0002). No model, HTTP, or database. Used by `ExtractionService` |
 | Extraction service | implemented - S002-T008 | One Document -> injected `LLMClient` + T007 validator -> one unit of work: `LLMRun` always, Event rows only on `accepted`. Called by the cycle extract stage. Default cycle client is `FakeLLMClient` until T011 |
 | Anthropic Claude API (external) | not yet used - Phase 3 | Tiered LLM calls (Haiku/Sonnet/Opus) behind the validation layer |
@@ -83,7 +86,9 @@ Host-side Alembic, seed, and `run_once` talk to the published db port
   (ADR-0004). Alert *rows* are not written yet. Ingest and extract have real
   bodies; narratives, evidence, state, and alerts remain passthrough.
   Extract invokes `ExtractionService` (default `FakeLLMClient` until T011).
-  The monthly spend ceiling is not yet enforced in code (T010).
+  The monthly spend ceiling is enforced in the extract stage before each
+  call (ADR-0015): at the ceiling, no further calls, cycle still succeeds,
+  skipped Documents stay `COLLECTED`.
 - Alerts will be rows written in the same transaction as the change that caused
   them; the dashboard will poll (ADR-0005).
 - All state is in the database volume; the app container is disposable.

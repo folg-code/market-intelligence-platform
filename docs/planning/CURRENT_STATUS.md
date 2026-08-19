@@ -13,20 +13,22 @@ Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
                          (one source adapter of the MVP set); Phase 3 planned
                          as Sprint 002
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-3 landed
-                         (S002-T002..T009): unit of work, env-isolated unit
+Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-4 landed
+                         (S002-T002..T010): unit of work, env-isolated unit
                          tests, terminal CycleRun trigger, honest seed
                          registry, llm/ client port with FakeLLMClient,
                          the deterministic extraction validator,
-                         ExtractionService persisting Event + LLMRun, and
-                         the cycle extract stage over COLLECTED Documents.
-Overall Status:          Sprint 002 in progress - Waves 1-3 merged
-                         (PRs #16-#25). Next: S002-T010 (monthly budget guard).
+                         ExtractionService persisting Event + LLMRun,
+                         the cycle extract stage over COLLECTED Documents,
+                         and the monthly LLM budget guard.
+Overall Status:          Sprint 002 in progress - Waves 1-4 merged
+                         (PRs #16-#27). Next: S002-T011 (live Anthropic
+                         smoke; blocked on API key).
 Active Sprint:           002 - The first LLM slice (Status: Approved)
 Last Completed Sprint:   001 - Foundation to first real document
                          (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
-Next Planned Capability: S002-T010 - monthly budget guard enforcing the
-                         ADR-0015 ceiling from recorded token usage
+Next Planned Capability: S002-T011 - one live Anthropic run producing a
+                         real Event and a real LLMRun
 ```
 
 ## 3. Current Objective
@@ -176,11 +178,21 @@ machinery is the real unknown.
   (specified design). Default `run_once` still uses `FakeLLMClient` (empty
   events) until T011. The monthly budget guard is T010 and is not in this
   task.
+- S002-T010: monthly LLM budget guard (PR #27). Spend for the UTC calendar
+  month of `CycleRun.started_at` is derived from recorded
+  `llm_runs.token_usage` against the `llm/models.py` rate table. Extract
+  consults the guard before each call. Ceiling, soft threshold, and
+  per-cycle cap are Settings (`LLM_MONTHLY_CEILING_USD` default $10,
+  `LLM_MONTHLY_SOFT_THRESHOLD_RATIO` default 0.80,
+  `CYCLE_EXTRACT_DOCUMENT_CAP` default 20). At the ceiling: zero further
+  calls, the cycle still `SUCCEEDED`, skipped Documents stay `COLLECTED`.
+  Soft threshold is recorded (`llm_budget_approaching`) with no behaviour
+  change. Default `run_once` still uses `FakeLLMClient` until T011.
 
 ## 5. Work in Progress
 
-- S002-T010 (monthly budget guard enforcing the ADR-0015 ceiling from
-  recorded token usage) is next; depends on T009.
+- S002-T011 (one live Anthropic smoke run) is next; blocked on an Anthropic
+  API key (section 6). T010 (PR #27) is merged.
 
 ## 6. Blocked Work
 
@@ -242,7 +254,7 @@ embedding-model-source decision.
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
 | 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
-| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 9 / 12 |
+| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 10 / 12 |
 
 ## 12. Update Rules
 

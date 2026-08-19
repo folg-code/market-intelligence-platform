@@ -14,8 +14,8 @@ Where PowerShell and bash differ, both forms are shown.
 - Git
 
 No Anthropic API key is needed yet: default `run_once` drives extract with
-`FakeLLMClient` until S002-T011. The monthly budget guard (T010) is not
-built.
+`FakeLLMClient` until S002-T011. The monthly budget guard is in place
+(defaults: ceiling $10, soft threshold 80% of the ceiling, per-cycle cap 20).
 
 ## 2. Clone to a stored Document
 
@@ -62,10 +62,20 @@ those two values.
 
 `CYCLE_EXTRACT_DOCUMENT_CAP` (default 20) bounds how many `COLLECTED`
 Documents one cycle sends through extract. It is a per-cycle blast-radius
-cap (ADR-0015), not the monthly spend ceiling — that guard is T010.
-Host-side `run_once` reads the value from `.env`. The `app` container
-does not currently receive this variable from compose, so the scheduled
-cycle uses the settings default of 20 unless compose is updated.
+cap (ADR-0015), not the monthly spend ceiling.
+
+`LLM_MONTHLY_CEILING_USD` (default 10) is the ADR-0015 monthly ceiling.
+The extract stage consults spend from recorded `llm_runs.token_usage`
+against the `llm/models.py` rate table, for the UTC calendar month of
+`CycleRun.started_at`, before each call. At or above the ceiling it
+issues no further calls; the cycle still `SUCCEEDED` and skipped
+Documents stay `COLLECTED`. `LLM_MONTHLY_SOFT_THRESHOLD_RATIO` (default
+0.80) records that spend is approaching the ceiling (`llm_budget_approaching`
+on the CycleRun) but does not change behaviour.
+
+Host-side `run_once` reads these values from `.env`. The `app` container
+does not currently receive them from compose, so the scheduled cycle uses
+the Settings defaults unless compose is updated.
 
 ### 2.3 Compose, migrate, seed
 
@@ -112,7 +122,8 @@ docker compose exec db psql -U moj_projekt -d moj_projekt -c "SELECT source_key,
 ```
 
 The extract stage then takes `COLLECTED` Documents, oldest first, up to
-`CYCLE_EXTRACT_DOCUMENT_CAP`. Default `run_once` uses `FakeLLMClient` with
+`CYCLE_EXTRACT_DOCUMENT_CAP`, unless the monthly ceiling has already been
+reached. Default `run_once` uses `FakeLLMClient` with
 an empty `events` payload: that is a terminal `accepted` verdict, so
 processed Documents advance to `EVENTS_EXTRACTED` and an `LLMRun` is
 written, typically with zero Event rows. A second `run_once` immediately
@@ -216,9 +227,8 @@ manual / CI.
 ## 7. Out of scope here
 
 No VPS deploy, backup/restore, or dashboard. No remaining source adapters
-and no live Anthropic calls (default extract uses `FakeLLMClient`). The
-monthly budget guard is not built. Schema for later pieces already exists;
-the commands above do not invoke Anthropic.
+and no live Anthropic calls (default extract uses `FakeLLMClient`). Schema
+for later pieces already exists; the commands above do not invoke Anthropic.
 
 ## 8. Update rule
 
