@@ -88,6 +88,21 @@ class SqlAlchemyDocumentRepository:
         row = self._session.get(DocumentModel, document_id)
         return _to_domain(row) if row is not None else None
 
+    def list_by_processing_status(
+        self, status: ProcessingStatus, *, limit: int
+    ) -> list[Document]:
+        if limit < 0:
+            raise ValueError("list_by_processing_status limit must be >= 0")
+        if limit == 0:
+            return []
+        rows = self._session.scalars(
+            select(DocumentModel)
+            .where(DocumentModel.processing_status == int(status))
+            .order_by(DocumentModel.collected_at.asc(), DocumentModel.id.asc())
+            .limit(limit)
+        ).all()
+        return [_to_domain(row) for row in rows]
+
     def advance_processing_status(
         self, document_id: UUID, new_status: ProcessingStatus
     ) -> Document:

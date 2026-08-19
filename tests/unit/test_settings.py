@@ -32,3 +32,23 @@ def test_settings_read_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert settings.postgres_host == "localhost"
     assert settings.postgres_password == "from-env"
+
+
+def test_cycle_extract_document_cap_defaults_to_twenty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CYCLE_EXTRACT_DOCUMENT_CAP", raising=False)
+    settings = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        postgres_password="secret",
+    )
+
+    assert settings.cycle_extract_document_cap == 20
+
+
+def test_cycle_extract_document_cap_rejects_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CYCLE_EXTRACT_DOCUMENT_CAP", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, postgres_password="secret")  # type: ignore[call-arg]

@@ -4,9 +4,9 @@ evidence, state, alerts - in that fixed order, every cycle.
 
 :data:`DEFAULT_STAGES` is a plain ordered sequence of :class:`Stage`, not
 branching logic keyed by name - :func:`moj_projekt.cycle.run_cycle.run_cycle`
-iterates it uniformly. Production replaces the ingest ``run`` callable via
-:func:`moj_projekt.cycle.ingest.build_production_stages`; the other five
-stages stay passthrough until later tasks fill them in.
+iterates it uniformly. Production replaces the ingest and extract ``run``
+callables via :func:`moj_projekt.cycle.ingest.build_production_stages`; the
+other four stages stay passthrough until later tasks fill them in.
 
 ``Stage.run`` takes the in-progress :class:`~moj_projekt.domain.cycle_run.CycleRun`
 and the current :class:`~moj_projekt.domain.repositories.UnitOfWork` so a
@@ -35,8 +35,9 @@ class Stage:
     raising, which :func:`~moj_projekt.cycle.run_cycle.run_cycle` catches
     and records as that stage's
     :class:`~moj_projekt.domain.cycle_run.StageOutcome`. Per-source ingest
-    failures are *not* stage failures - they are written onto
-    ``CycleRun.source_outcomes`` and the callable returns normally.
+    failures and per-document extract transport failures are *not* stage
+    failures - they are written onto ``CycleRun.source_outcomes`` and the
+    callable returns normally.
     """
 
     name: str

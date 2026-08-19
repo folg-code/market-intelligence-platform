@@ -236,3 +236,45 @@ def test_collected_before_published_is_flagged_not_corrected(
 
     assert stored.collected_at == anomalous_collected_at
     assert stored.has_collection_timestamp_anomaly is True
+
+
+def test_list_by_processing_status_returns_oldest_collected_first_up_to_limit(
+    migrated_session: Session, engine: Engine
+) -> None:
+    _seed_source(engine)
+    older = _make_document(
+        url="https://example.com/older",
+        source_native_id="older",
+        collected_at=_COLLECTED,
+    )
+    newer = _make_document(
+        url="https://example.com/newer",
+        source_native_id="newer",
+        published_at=_PUBLISHED + timedelta(hours=1),
+        collected_at=_COLLECTED + timedelta(hours=1),
+    )
+    already_extracted = _make_document(
+        url="https://example.com/done",
+        source_native_id="done",
+        published_at=_PUBLISHED + timedelta(hours=2),
+        collected_at=_COLLECTED - timedelta(hours=1),
+    )
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        uow.documents.add(older)
+        uow.documents.add(newer)
+        stored_done = uow.documents.add(already_extracted)
+        uow.documents.advance_processing_status(
+            stored_done.id,  # type: ignore[arg-type]
+            ProcessingStatus.EVENTS_EXTRACTED,
+        )
+
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        listed = uow.documents.list_by_processing_status(
+            ProcessingStatus.COLLECTED, limit=1
+        )
+        empty = uow.documents.list_by_processing_status(
+            ProcessingStatus.COLLECTED, limit=0
+        )
+
+    assert [document.source_native_id for document in listed] == ["older"]
+    assert empty == []
