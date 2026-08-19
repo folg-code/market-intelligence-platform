@@ -18,8 +18,8 @@ An index of architectural decisions. Each row links to one ADR.
 | [ADR-0012](ADR-0012-server-rendered-dashboard-jinja-htmx.md) | Server-rendered dashboard: FastAPI + Jinja2 + HTMX; SPA is a staged later step | Accepted |
 | [ADR-0013](ADR-0013-single-host-docker-compose-deployment.md) | Deployment target: local machine or a single VPS via Docker Compose | Accepted |
 | [ADR-0014](ADR-0014-pgvector-for-narrative-candidate-matching.md) | pgvector in scope for MVP: embedding-based narrative candidate matching (amends ADR-0005) | Accepted |
-| [ADR-0015](ADR-0015-llm-cost-ceiling-and-spend-model.md) | Monthly LLM cost ceiling ($10 MVP / $50 product); spend scales with new documents, not cycles; no batch on the live path; no prompt caching in MVP | Proposed |
-| [ADR-0016](ADR-0016-haiku-as-default-extraction-model.md) | Haiku 4.5 is the default extraction model; Sonnet is an escalation (amends ADR-0010) | Proposed |
+| [ADR-0015](ADR-0015-llm-cost-ceiling-and-spend-model.md) | Monthly LLM cost ceiling ($10 MVP / $50 product); spend scales with new documents, not cycles; no batch on the live path; no prompt caching in MVP | Accepted |
+| [ADR-0016](ADR-0016-haiku-as-default-extraction-model.md) | Haiku 4.5 is the default extraction model; Sonnet is an escalation (amends ADR-0010) | Accepted |
 
 Statuses: `Proposed`, `Accepted`, `Superseded by ADR-NNNN`, `Rejected`.
 
@@ -47,6 +47,6 @@ text is left untouched.
   Sprint 002.
 
 Resolved since the last revision: the **monthly LLM cost ceiling** (ADR-0010
-follow-up) is decided in ADR-0015, pending approval.
+follow-up) is decided in ADR-0015 (Accepted).
 
 For the ADR format itself, see the `adr` skill.

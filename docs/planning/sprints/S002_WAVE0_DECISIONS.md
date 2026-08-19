@@ -255,26 +255,26 @@ These checkboxes are checked ONLY by a human, as the act of approval - the
 agent proposes them unchecked and never checks them itself. Only a full set of
 checked items = a green light for `engineer` (`governance`).
 
-- [ ] Approve **ADR-0015** (monthly LLM cost ceiling $10 MVP / $50 product;
+- [x] Approve **ADR-0015** (monthly LLM cost ceiling $10 MVP / $50 product;
       spend scales with documents not cycles; no batch on the live path; no
       prompt caching in MVP) - set its status to `Accepted`.
-- [ ] Approve **ADR-0016** (Haiku 4.5 `claude-haiku-4-5-20251001` as the default
+- [x] Approve **ADR-0016** (Haiku 4.5 `claude-haiku-4-5-20251001` as the default
       extraction model, amending ADR-0010's tier mapping; Sonnet becomes an
       evidence-driven escalation) - set its status to `Accepted`, and accept the
       extraction-quality risk it records.
-- [ ] Confirm the sprint branch (`sprint/first-llm-slice`).
-- [ ] Confirm the scope inventory (D-S002-02), including the two new modules
+- [x] Confirm the sprint branch (`sprint/first-llm-slice`).
+- [x] Confirm the scope inventory (D-S002-02), including the two new modules
       `llm/` and `extraction/`.
-- [ ] Confirm the binding design decisions (D-S002-04), in particular: no
+- [x] Confirm the binding design decisions (D-S002-04), in particular: no
       candidate table, a terminal verdict is never auto-retried, and
       `EVENTS_EXTRACTED` changes meaning.
-- [ ] Confirm the correctness/quality gate (D-S002-05).
-- [ ] Confirm the review-record process change (D-S002-06) - reviews posted on
+- [x] Confirm the correctness/quality gate (D-S002-05).
+- [x] Confirm the review-record process change (D-S002-06) - reviews posted on
       the PR, squash merge kept.
-- [ ] Confirm the out-of-scope list (D-S002-07), in particular that the
+- [x] Confirm the out-of-scope list (D-S002-07), in particular that the
       remaining Phase 2 adapters stay deferred.
-- [ ] Confirm follow-on ownership (D-S002-08).
-- [ ] Set `SPRINT_002.md` to `Status: Approved`.
+- [x] Confirm follow-on ownership (D-S002-08).
+- [x] Set `SPRINT_002.md` to `Status: Approved`.
 
-Approved by:
-Approved date:
+Approved by: folga33 (user, in-conversation approval)
+Approved date: 2026-08-19

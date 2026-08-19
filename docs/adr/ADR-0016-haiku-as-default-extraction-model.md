@@ -1,6 +1,6 @@
 # ADR-0016 - Haiku 4.5 is the default extraction model; Sonnet is an escalation, not the workhorse (amends ADR-0010)
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-19
 Owners: architect
 Approved by:

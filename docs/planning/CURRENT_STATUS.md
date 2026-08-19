@@ -15,10 +15,10 @@ Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
 Current Milestone:       MVP (Roadmap Phases 0-10)
 Implementation Status:   Full Sprint 001 delivered: toolchain through
                          WORKFLOWS.md (S001-T002..T014). No LLM code yet.
-Overall Status:          Sprint 001 closed 2026-08-19. Sprint 002 planned and
-                         awaiting human approval (Wave 0 Checklist), together
-                         with ADR-0015 and ADR-0016.
-Active Sprint:           none - Sprint 002 is Planned, not Approved
+Overall Status:          Sprint 001 closed 2026-08-19. Sprint 002 approved
+                         2026-08-19 (Wave 0 Checklist checked), together with
+                         ADR-0015 and ADR-0016; engineer may begin S002-T002.
+Active Sprint:           002 - The first LLM slice (Status: Approved)
 Last Completed Sprint:   001 - Foundation to first real document
                          (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
 Next Planned Capability: Sprint 002 - Roadmap Phase 3, the first LLM slice:
@@ -43,8 +43,9 @@ machinery is the real unknown.
 - Discovery: `docs/vision/PRODUCT_VISION.md`.
 - Architecture: `ARCHITECTURE_FOUNDATIONS.md`, `DOMAIN_MODEL.md`,
   ADR-0001..ADR-0014 (all four previously blocking stack questions resolved,
-  plus the pgvector amendment to ADR-0005). ADR-0015 and ADR-0016 are written
-  and `Proposed`, awaiting approval with Sprint 002.
+  plus the pgvector amendment to ADR-0005). ADR-0015 (cost ceiling) and
+  ADR-0016 (Haiku as the default extraction model, amending ADR-0010's
+  model-tier mapping) are `Accepted` as of 2026-08-19.
 - Planning: `ROADMAP.md` (Phases 0-10), `PROJECT_MANAGEMENT.md`, `SPRINT_001.md`
   (closed, with the sprint review in section 9), `S001_WAVE0_DECISIONS.md`,
   `PROBLEM_REGISTRY.md`, `TECHNICAL_DEBT.md`, and - new - `SPRINT_002.md` plus
@@ -139,20 +140,16 @@ machinery is the real unknown.
 
 ## 5. Work in Progress
 
-None in code. Sprint 002 is planned (`sprints/SPRINT_002.md`,
-`sprints/S002_WAVE0_DECISIONS.md`) and waiting on human approval. No
-implementation may begin until the sprint reads `Status: Approved`, the Wave 0
-Checklist is fully checked, and ADR-0015 and ADR-0016 read `Status: Accepted`.
+None in code yet. Sprint 002 is approved (`sprints/SPRINT_002.md`,
+`sprints/S002_WAVE0_DECISIONS.md`) and open; `engineer` may begin S002-T002
+(unit-of-work boundary) with S002-T006 (LLM client port and versioned prompts)
+startable in parallel. S002-T001 was the approval gate itself, now closed.
 
 ## 6. Blocked Work
 
-- **All of Sprint 002 is blocked on human approval** (`governance`): the Wave 0
-  Checklist in `S002_WAVE0_DECISIONS.md`, plus ADR-0015 (cost ceiling) and
-  ADR-0016 (Haiku as the default extraction model, amending ADR-0010). An
-  implementation relying on a `Proposed` ADR is a Critical review finding.
-- **S002-T011 only** additionally needs an Anthropic API key, which the human
-  obtains during the sprint. It is the last task for exactly that reason; every
-  other task runs against a fixture-driven fake client.
+- **S002-T011 only** needs an Anthropic API key, which the human obtains during
+  the sprint. It is the last task for exactly that reason; every other task runs
+  against a fixture-driven fake client.
 
 Historical: the user approved, in-conversation, on 2026-08-17:
 `PRODUCT_VISION.md`, `ARCHITECTURE_FOUNDATIONS.md`, `DOMAIN_MODEL.md`,
@@ -215,7 +212,7 @@ embedding-model-source decision.
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
 | 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
-| 002 | The first LLM slice: Document to Event, validated and audited | PLANNED - awaiting approval | 0 / 12 |
+| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 1 / 12 |
 
 ## 12. Update Rules
 

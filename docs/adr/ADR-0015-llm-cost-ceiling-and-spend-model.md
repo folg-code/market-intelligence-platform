@@ -1,6 +1,6 @@
 # ADR-0015 - Monthly LLM cost ceiling, and spend scales with new documents rather than with cycles
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-19
 Owners: architect
 Approved by:

@@ -5,10 +5,10 @@
 ```text
 Sprint: 002
 Phase: Roadmap Phase 3 (Event extraction - the first LLM slice)
-Status: Planned
-Approved By:
-Approved Date:
-Planned Start:
+Status: Approved
+Approved By: folga33 (user, in-conversation approval)
+Approved Date: 2026-08-19
+Planned Start: 2026-08-19
 Planned End:
 Sprint Goal Owner: architect (planning) / engineer (implementation)
 Depends On: human approval of ADR-0015 and ADR-0016, and of this sprint via the
@@ -121,7 +121,7 @@ section 5.1; the table is a lightweight overview, not a second task board.
 
 | Task | Outcome | Depends on | Status |
 |---|---|---|---|
-| S002-T001 | Wave 0 decisions and ADR-0015 / ADR-0016 approved by a human | - | Todo |
+| S002-T001 | Wave 0 decisions and ADR-0015 / ADR-0016 approved by a human | - | Done |
 | S002-T002 | Repositories stop committing; a unit of work makes multi-repository writes atomic | T001 | Todo |
 | S002-T003 | The unit suite passes regardless of ambient `POSTGRES_*` env or a local `.env` (PRB-001) | T001 | Todo |
 | S002-T004 | A terminal `CycleRun` row cannot be updated again (PRB-004) | T001 | Todo |
