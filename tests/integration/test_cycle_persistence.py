@@ -177,18 +177,20 @@ def _terminal_immutability_function_exists(db_engine: Engine) -> bool:
 
 def test_second_update_of_a_terminal_cycle_run_is_rejected_at_the_database(
     migrated_session: Session,
+    engine: Engine,
 ) -> None:
-    repository = SqlAlchemyCycleRunRepository(migrated_session)
-    created = repository.add(CycleRun(started_at=_STARTED_AT))
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        created = uow.cycle_runs.add(CycleRun(started_at=_STARTED_AT))
     ended_at = _STARTED_AT + timedelta(seconds=5)
     finished = created.finish(status=CycleRunStatus.SUCCEEDED, ended_at=ended_at)
-    updated = repository.update(finished)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        updated = uow.cycle_runs.update(finished)
 
-    with pytest.raises(DBAPIError, match="cycle_runs: terminal rows cannot be updated"):
-        repository.update(updated)
-    migrated_session.rollback()
+    with pytest.raises(
+        DBAPIError, match="cycle_runs: terminal rows cannot be updated"
+    ), SqlAlchemyUnitOfWork(engine) as uow:
+        uow.cycle_runs.update(updated)
 
-    # Raw SQL too: the rejection is the trigger, not Python-side finish().
     with pytest.raises(DBAPIError, match="cycle_runs: terminal rows cannot be updated"):
         migrated_session.execute(
             text("UPDATE cycle_runs SET stage_outcomes = '{}'::jsonb WHERE id = :id"),
@@ -197,7 +199,8 @@ def test_second_update_of_a_terminal_cycle_run_is_rejected_at_the_database(
         migrated_session.commit()
     migrated_session.rollback()
 
-    fetched = repository.get(created.id)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.cycle_runs.get(created.id)
     assert fetched is not None
     assert fetched.status is CycleRunStatus.SUCCEEDED
     assert fetched.ended_at == ended_at
