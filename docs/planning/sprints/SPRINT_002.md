@@ -122,11 +122,11 @@ section 5.1; the table is a lightweight overview, not a second task board.
 | Task | Outcome | Depends on | Status |
 |---|---|---|---|
 | S002-T001 | Wave 0 decisions and ADR-0015 / ADR-0016 approved by a human | - | Done |
-| S002-T002 | Repositories stop committing; a unit of work makes multi-repository writes atomic | T001 | Todo |
-| S002-T003 | The unit suite passes regardless of ambient `POSTGRES_*` env or a local `.env` (PRB-001) | T001 | Todo |
-| S002-T004 | A terminal `CycleRun` row cannot be updated again (PRB-004) | T001 | Todo |
-| S002-T005 | A clean cycle over the seeded registry records zero expected source failures (PRB-002) | T001 | Todo |
-| S002-T006 | An LLM client port with versioned prompt/schema artifacts, a pinned-model rate table, and a fixture-driven fake | T001 | Todo |
+| S002-T002 | Repositories stop committing; a unit of work makes multi-repository writes atomic | T001 | Done |
+| S002-T003 | The unit suite passes regardless of ambient `POSTGRES_*` env or a local `.env` (PRB-001) | T001 | Done |
+| S002-T004 | A terminal `CycleRun` row cannot be updated again (PRB-004) | T001 | Done |
+| S002-T005 | A clean cycle over the seeded registry records zero expected source failures (PRB-002) | T001 | Done |
+| S002-T006 | An LLM client port with versioned prompt/schema artifacts, a pinned-model rate table, and a fixture-driven fake | T001 | Done |
 | S002-T007 | A deterministic validator turning raw model output into `accepted` / `proposed` / `rejected`, with no infrastructure | T006 | Todo |
 | S002-T008 | Extraction service writing Event + `LLMRun` in one transaction, driven by the fake client | T002, T006, T007 | Todo |
 | S002-T009 | The cycle's extract stage: work queue, per-cycle cap, per-document isolation, status advance | T008 | Todo |

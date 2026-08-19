@@ -2,8 +2,7 @@
 
 Living document - update whenever a module is added, removed, or moved.
 
-Last updated: 2026-08-19. Matches the package layout on `sprint/first-llm-slice`
-after S002-T002 (unit of work; repositories flush, they do not commit).
+Last updated: 2026-08-19. Matches `sprint/first-llm-slice` after S002-T002..T006.
 
 ## Layout
 
@@ -29,6 +28,10 @@ src/moj_projekt/
   ingestion/     adapter.py (SourceAdapter + SourceFetchError), rss.py
                  (RssFeedAdapter; feed URL from seed endpoint_config).
                  Network I/O confined here.
+  llm/           client.py (LLMClient port), anthropic_client.py, fake.py,
+                 artifacts.py, models.py (task -> pinned id + rates),
+                 prompts/ (system_v1, event_extraction_v1, schema v1).
+                 Only this package may import the Anthropic SDK.
   cycle/         stages.py (six-stage list), ingest.py (production ingest),
                  run_cycle.py (orchestration + CycleRun recording),
                  run_once.py (scheduler-free CLI: python -m moj_projekt.cycle.run_once)
@@ -41,10 +44,11 @@ migrations/      Alembic env + versions
                  0004 Narrative family + identity_embedding vector(384)
                  placeholder + evidence_packs.narrative_id FK; 0005
                  NarrativeInstrumentImpact/Alert/LLMRun/AuditEntry;
-                 0006 cycle_runs (partial unique index: at most one RUNNING)
+                 0006 cycle_runs (partial unique index: at most one RUNNING);
+                 0007 terminal CycleRun immutability trigger
 tests/           unit/ (no infrastructure; default pytest run)
                  integration/ (marker `integration`; needs compose db)
-                 fixtures/rss/ (sample, empty, malformed feeds)
+                 fixtures/rss/ and fixtures/llm/
                  live RSS test is marked `network` and `integration`,
                  excluded from CI
 .github/
@@ -60,19 +64,17 @@ scripts/
 |---|---|---|---|---|
 | `config` | Load and validate settings from the environment (`Settings`, `get_settings`) | Implemented | - | anything project-specific |
 | `domain` | The model of `DOMAIN_MODEL.md`: value objects, invariants, repository interfaces | Implemented for Source, Document, Event, EvidencePack, Narrative, NarrativeEpisode, NarrativeEvent, NarrativeRelation, NarrativeInstrumentImpact, Alert, LLMRun, AuditEntry, Clock, CycleRun, enums, evidence, embedding descriptor | - | SQLAlchemy, httpx, the Anthropic SDK - enforced by `tests/unit/test_domain_boundary.py` |
-| `persistence` | Map domain objects to PostgreSQL; implement repository interfaces; seed the Source registry; `/health` db+pgvector check | Implemented for every MVP entity above. Document: DB-level immutability trigger + dedupe (`ON CONFLICT DO NOTHING`). Event: non-empty `source_ids` CHECK. EvidencePack: immutability trigger + `independent_source_count <= source_count`. Narrative: unique `canonical_key`, `identity_embedding vector(384)` placeholder with all-or-nothing CHECK. NarrativeEpisode: `EXCLUDE USING gist`. NarrativeEvent: composite PK. NarrativeRelation: self-relation CHECK + unique triple. NarrativeInstrumentImpact: upsert on `(narrative_id, instrument)`. Alert: unique `(narrative_id, alert_type, trigger_key)`. LLMRun and AuditEntry: append-only trigger; LLMRun rejects `"latest"`. CycleRun: partial unique index, at most one RUNNING; `update()` is deliberate. Repositories flush; `SqlAlchemyUnitOfWork` owns session lifecycle and the single commit/rollback. Seed: `python -m moj_projekt.persistence.seed_sources` over six declarative sources | `domain`, `config` | `ingestion`, `cycle`, `api` |
+| `persistence` | Map domain objects to PostgreSQL; implement repository interfaces; seed the Source registry; `/health` db+pgvector check | Implemented for every MVP entity above. Document: DB-level immutability trigger + dedupe (`ON CONFLICT DO NOTHING`). Event: non-empty `source_ids` CHECK. EvidencePack: immutability trigger + `independent_source_count <= source_count`. Narrative: unique `canonical_key`, `identity_embedding vector(384)` placeholder with all-or-nothing CHECK. NarrativeEpisode: `EXCLUDE USING gist`. NarrativeEvent: composite PK. NarrativeRelation: self-relation CHECK + unique triple. NarrativeInstrumentImpact: upsert on `(narrative_id, instrument)`. Alert: unique `(narrative_id, alert_type, trigger_key)`. LLMRun and AuditEntry: append-only trigger; LLMRun rejects `"latest"`. CycleRun: partial unique index (at most one RUNNING) plus `0007` terminal-row UPDATE trigger. Repositories flush; `SqlAlchemyUnitOfWork` owns session lifecycle and the single commit/rollback. Seed: `python -m moj_projekt.persistence.seed_sources` (only `bloomberg_markets` active) | `domain`, `config` | `ingestion`, `cycle`, `api` |
 | `ingestion` | Fetch and normalize external sources into Documents | Implemented (S001-T012): `SourceAdapter` + one RSS adapter. Persistence is the cycle ingest stage. A later adapter implements the interface and is registered by `source_type` | `domain`, `config` | `cycle`, `api` |
+| `llm` | One port to call a model: versioned prompts/schema, pinned ids, FakeLLMClient | Implemented (S002-T006). Real Anthropic path is T011 | `config` | `domain`, `cycle`, `api` — Anthropic SDK must not leak outside this package (`tests/unit/test_llm_boundary.py`) |
 | `cycle` | Ordered stages of the 5-minute cycle, CycleRun recording, scheduler-free entrypoint | Implemented (S001-T011/T012, S002-T002): six-stage list; ingest wired with per-source isolation; other stages passthrough; overlap prevention at scheduler (`max_instances=1`) and DB. CycleRun two-phase write is one unit of work for RUNNING, one per stage, then one that finalizes even if a stage rolled back | `domain`, `ingestion`, `persistence` | `api` |
 | `api` | ASGI app, lifespan, `GET /health` | Implemented for health and scheduler start/stop; dashboard read path is later | all of the above | - |
 
-Dependency direction is one-way: `api` -> `cycle` -> `ingestion`/`persistence`
--> `domain`. Nothing imports upward.
+Dependency direction is one-way: `api` -> `cycle` -> `ingestion`/`persistence`/`llm` -> `domain`/`config`. Nothing imports upward.
 
 ## Nested `CLAUDE.md` files
 
-None yet. Add one only when a module diverges from repo-wide conventions - the
-likely first candidate is `ingestion/`, once per-source quirks (feed formats,
-rate limits, SEC/BLS access patterns) accumulate.
+- `src/moj_projekt/llm/CLAUDE.md` - pinned model ids, prompt-version bumps, secrets, Anthropic SDK stays in this package.
 
 ## Related
 

@@ -13,16 +13,17 @@ Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
                          (one source adapter of the MVP set); Phase 3 planned
                          as Sprint 002
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Full Sprint 001 delivered: toolchain through
-                         WORKFLOWS.md (S001-T002..T014). No LLM code yet.
-Overall Status:          Sprint 001 closed 2026-08-19. Sprint 002 approved
-                         2026-08-19 (Wave 0 Checklist checked), together with
-                         ADR-0015 and ADR-0016; engineer may begin S002-T002.
+Implementation Status:   Sprint 001 complete. Sprint 002 Wave 1 landed
+                         (S002-T002..T006): unit of work, env-isolated unit
+                         tests, terminal CycleRun trigger, honest seed
+                         registry, llm/ client port with FakeLLMClient.
+Overall Status:          Sprint 002 in progress - Wave 1 merged (PRs #16-#20).
+                         Next: S002-T007 (deterministic extraction validator).
 Active Sprint:           002 - The first LLM slice (Status: Approved)
 Last Completed Sprint:   001 - Foundation to first real document
                          (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
-Next Planned Capability: Sprint 002 - Roadmap Phase 3, the first LLM slice:
-                         Document -> Event, validated and audited
+Next Planned Capability: S002-T007 - deterministic validator
+                         (accepted / proposed / rejected), no infrastructure
 ```
 
 ## 3. Current Objective
@@ -137,13 +138,22 @@ machinery is the real unknown.
 - S001-T014: `docs/reference/WORKFLOWS.md` (clone to a stored Document),
   README quickstart, and a refresh of `ARCHITECTURE_OVERVIEW.md`,
   `MODULE_MAP.md`, `docs/README.md`, and root `CLAUDE.md`.
+- S002-T002: `SqlAlchemyUnitOfWork` owns the session; repositories `flush()`
+  only. Cycle commits RUNNING, then one UoW per stage, then a terminal write
+  that survives a rolled-back stage (PRs #20).
+- S002-T003: unit suite ignores ambient `POSTGRES_*` / `.env` (`tests/conftest.py`);
+  PRB-001 resolved (PR #16).
+- S002-T004: migration `0007` `BEFORE UPDATE` trigger rejects writes to a
+  terminal `cycle_runs` row; PRB-004 resolved (PR #19).
+- S002-T005: only `bloomberg_markets` is seeded active; PRB-002 resolved
+  (PR #17). Existing registries that still have those keys active need a
+  manual flag flip (`ON CONFLICT DO NOTHING`).
+- S002-T006: `llm/` port, FakeLLMClient, versioned prompt/schema v1, pinned
+  `claude-haiku-4-5-20251001` (PR #18). Real API is T011.
 
 ## 5. Work in Progress
 
-None in code yet. Sprint 002 is approved (`sprints/SPRINT_002.md`,
-`sprints/S002_WAVE0_DECISIONS.md`) and open; `engineer` may begin S002-T002
-(unit-of-work boundary) with S002-T006 (LLM client port and versioned prompts)
-startable in parallel. S002-T001 was the approval gate itself, now closed.
+- S002-T007 (deterministic extraction validator) is next; depends on T006.
 
 ## 6. Blocked Work
 
@@ -158,10 +168,8 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
 
 ## 7. Open Critical Problems
 
-- None. `PROBLEM_REGISTRY.md` holds four open problems (PRB-001..PRB-004), all
-  MEDIUM or LOW; `TECHNICAL_DEBT.md` holds four accepted entries
-  (TD-001..TD-004), all MEDIUM or LOW. Sprint 002 plans to close PRB-001,
-  PRB-002 and PRB-004; PRB-003 stays open until Phase 4 by design.
+- None. Open in `PROBLEM_REGISTRY.md`: PRB-003 only (Phase 4). PRB-001, PRB-002
+  and PRB-004 are RESOLVED. `TECHNICAL_DEBT.md`: TD-001..TD-004.
 
 ## 8. Open Decisions
 
@@ -171,13 +179,8 @@ ADR-0001..ADR-0014, and `ROADMAP.md` are `Accepted`; `SPRINT_001.md` is
 | Dashboard access protection when reachable beyond localhost | before any VPS deploy | ADR-0013 follow-up |
 | Retention policy for document bodies and LLM `raw_output` | Phase 10 | ADR-0005/ADR-0013 follow-up. Becomes pressing during Sprint 002, since `llm_runs` starts filling with verbatim `raw_output` for the first time |
 
-**Resolved, pending approval:** the monthly LLM cost ceiling is decided -
-$10/month for the MVP, $50/month for the eventual product - and written up as
-ADR-0015 together with the spend model (cost scales with new documents, not with
-cycles), the rejection of the Batch API on the live path, and the deferral of
-prompt caching. ADR-0016 follows from it: Haiku 4.5 becomes the default
-extraction model, amending ADR-0010's tier mapping, because Sonnet at standard
-pricing does not fit the ceiling.
+ADR-0015 ($10/month MVP ceiling) and ADR-0016 (Haiku 4.5 as default extraction
+model) are `Accepted` as of 2026-08-19.
 
 ## 9. Known Risks
 
@@ -212,7 +215,7 @@ embedding-model-source decision.
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
 | 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
-| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 1 / 12 |
+| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 6 / 12 |
 
 ## 12. Update Rules
 
