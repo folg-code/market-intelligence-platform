@@ -9,6 +9,7 @@ default in `compose.yaml`):
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,17 +25,19 @@ from sqlalchemy.orm import Session
 from moj_projekt.config.settings import Settings
 from moj_projekt.cycle.extract import make_extract_stage
 from moj_projekt.cycle.run_cycle import run_cycle
+from moj_projekt.cycle.run_once import run_once
 from moj_projekt.cycle.stages import Stage
 from moj_projekt.domain.clock import Clock
 from moj_projekt.domain.cycle_run import CycleRun, CycleRunStatus
 from moj_projekt.domain.document import Document, ProcessingStatus
-from moj_projekt.domain.enums import SourceTier
+from moj_projekt.domain.enums import CandidateStatus, SourceTier
 from moj_projekt.domain.repositories import UnitOfWork
 from moj_projekt.domain.source import Source
 from moj_projekt.extraction.service import ExtractionService
 from moj_projekt.extraction.types import DEFAULT_VALIDATION_CONFIG
 from moj_projekt.llm.client import InferenceParams, LLMResponse, TokenUsage
 from moj_projekt.llm.fake import FakeLLMClient
+from moj_projekt.persistence.document_repository import SqlAlchemyDocumentRepository
 from moj_projekt.persistence.unit_of_work import (
     SqlAlchemyUnitOfWork,
     sqlalchemy_unit_of_work_factory,
@@ -286,3 +289,189 @@ def test_raising_extraction_is_isolated_per_document(
     assert ok_row is not None
     assert failing_row.processing_status is ProcessingStatus.COLLECTED
     assert ok_row.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+
+
+def _proposed_response() -> bytes:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload["events"][0]["confidence"] = 0.4
+    return json.dumps(payload).encode("utf-8")
+
+
+def _stored_validation_status(session: Session, document_id: UUID) -> str:
+    return str(
+        session.execute(
+            text(
+                "SELECT validation_status FROM llm_runs "
+                "WHERE input_reference_ids->>0 = :doc_id"
+            ),
+            {"doc_id": str(document_id)},
+        ).scalar_one()
+    )
+
+
+def test_rejected_verdict_advances_without_an_event(
+    migrated_session: Session, engine: Engine
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="reject")])
+    client = FakeLLMClient(b"this is not json {")
+
+    result = _run_extract_cycle(engine, client=client, document_cap=20)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert _count(migrated_session, "events") == 0
+    assert _count(migrated_session, "llm_runs") == 1
+    document_id = cast(UUID, stored[0].id)
+    assert _stored_validation_status(migrated_session, document_id) == CandidateStatus.REJECTED
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(document_id)
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert result.source_outcomes == {}
+
+
+def test_proposed_verdict_advances_without_an_event(
+    migrated_session: Session, engine: Engine
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="propose")])
+    client = FakeLLMClient(_proposed_response())
+
+    result = _run_extract_cycle(engine, client=client, document_cap=20)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert _count(migrated_session, "events") == 0
+    assert _count(migrated_session, "llm_runs") == 1
+    document_id = cast(UUID, stored[0].id)
+    assert _stored_validation_status(migrated_session, document_id) == CandidateStatus.PROPOSED
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(document_id)
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert result.source_outcomes == {}
+
+
+def test_zero_event_accepted_advances_without_an_event(
+    migrated_session: Session, engine: Engine
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="empty")])
+    client = FakeLLMClient(b'{"events": []}')
+
+    result = _run_extract_cycle(engine, client=client, document_cap=20)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert _count(migrated_session, "events") == 0
+    assert _count(migrated_session, "llm_runs") == 1
+    document_id = cast(UUID, stored[0].id)
+    assert _stored_validation_status(migrated_session, document_id) == CandidateStatus.ACCEPTED
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(document_id)
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert result.source_outcomes == {}
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        TimeoutError("timed out calling the model"),
+        RuntimeError("HTTP 503 from provider"),
+        RuntimeError("rate limit exceeded"),
+    ],
+)
+def test_transport_failure_leaves_document_collected(
+    migrated_session: Session, engine: Engine, failure: BaseException
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="transport")])
+    client = _ScriptedLLMClient([failure])
+
+    result = _run_extract_cycle(engine, client=client, document_cap=20)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert result.stage_outcomes["extract"].succeeded is True
+    assert client.call_count == 1
+    assert _count(migrated_session, "events") == 0
+    assert _count(migrated_session, "llm_runs") == 0
+    document_id = cast(UUID, stored[0].id)
+    assert result.source_outcomes[str(document_id)].succeeded is False
+    assert type(failure).__name__ in (result.source_outcomes[str(document_id)].failure_reason or "")
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(document_id)
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.COLLECTED
+
+
+def test_stage_level_failure_yields_exactly_one_terminal_cycle_run(
+    migrated_session: Session, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="queued")])
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+
+    def _boom(
+        self: SqlAlchemyDocumentRepository, status: ProcessingStatus, *, limit: int
+    ) -> list[Document]:
+        del self, status, limit
+        raise RuntimeError("repository unavailable")
+
+    monkeypatch.setattr(SqlAlchemyDocumentRepository, "list_by_processing_status", _boom)
+
+    result = _run_extract_cycle(engine, client=client, document_cap=20)
+
+    assert result.status is CycleRunStatus.FAILED
+    assert result.status.is_terminal is True
+    assert result.failure_reason is not None
+    assert "extract" in result.failure_reason
+    assert _count(migrated_session, "cycle_runs") == 1
+    assert client.call_count == 0
+    assert _count(migrated_session, "events") == 0
+    assert _count(migrated_session, "llm_runs") == 0
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(cast(UUID, stored[0].id))
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.COLLECTED
+
+
+def test_processing_status_does_not_regress_after_extract(
+    migrated_session: Session, engine: Engine
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="1")])
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+    document_id = cast(UUID, stored[0].id)
+
+    result = _run_extract_cycle(engine, client=client, document_cap=20)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    with pytest.raises(ValueError, match="cannot regress"), SqlAlchemyUnitOfWork(
+        engine
+    ) as uow:
+        uow.documents.advance_processing_status(document_id, ProcessingStatus.COLLECTED)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(document_id)
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED
+
+
+def test_run_once_extracts_through_production_stages(
+    migrated_session: Session, engine: Engine
+) -> None:
+    stored = _persist_documents(engine, [_document(suffix="wired")])
+    client = FakeLLMClient(_FIXTURE.read_bytes())
+
+    result = run_once(
+        engine,
+        clock=_FixedClock(),
+        adapters={},
+        llm_client=client,
+        extract_document_cap=20,
+    )
+
+    assert result is not None
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert _count(migrated_session, "events") == 1
+    assert _count(migrated_session, "llm_runs") == 1
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        fetched = uow.documents.get(cast(UUID, stored[0].id))
+    assert fetched is not None
+    assert fetched.processing_status is ProcessingStatus.EVENTS_EXTRACTED

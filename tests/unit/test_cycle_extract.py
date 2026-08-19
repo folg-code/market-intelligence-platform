@@ -5,6 +5,7 @@ zero-call invariant (S002-T009) - no database, no network.
 from __future__ import annotations
 
 import ast
+import json
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -373,9 +374,41 @@ def test_one_failing_document_does_not_block_another() -> None:
     assert str(ok.id) not in result.source_outcomes
 
 
+def _proposed_response() -> bytes:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload["events"][0]["confidence"] = 0.4
+    return json.dumps(payload).encode("utf-8")
+
+
 def test_rejected_verdict_still_advances_to_events_extracted() -> None:
     document = _document(suffix="reject")
     client = FakeLLMClient(b"this is not json {")
+    result, repo, events, llm_runs = _run_extract(documents=[document], client=client)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert events.items == []
+    assert len(llm_runs.items) == 1
+    assert repo.documents[0].processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert result.source_outcomes == {}
+
+
+def test_proposed_verdict_still_advances_to_events_extracted() -> None:
+    document = _document(suffix="propose")
+    client = FakeLLMClient(_proposed_response())
+    result, repo, events, llm_runs = _run_extract(documents=[document], client=client)
+
+    assert result.status is CycleRunStatus.SUCCEEDED
+    assert client.call_count == 1
+    assert events.items == []
+    assert len(llm_runs.items) == 1
+    assert repo.documents[0].processing_status is ProcessingStatus.EVENTS_EXTRACTED
+    assert result.source_outcomes == {}
+
+
+def test_zero_event_accepted_still_advances_to_events_extracted() -> None:
+    document = _document(suffix="empty")
+    client = FakeLLMClient(b'{"events": []}')
     result, repo, events, llm_runs = _run_extract(documents=[document], client=client)
 
     assert result.status is CycleRunStatus.SUCCEEDED
