@@ -13,20 +13,20 @@ Current Phase:           Roadmap Phases 0 and 1 complete; Phase 2 partial
                          (one source adapter of the MVP set); Phase 3 planned
                          as Sprint 002
 Current Milestone:       MVP (Roadmap Phases 0-10)
-Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-2 plus
-                         T008 landed (S002-T002..T008): unit of work,
-                         env-isolated unit tests, terminal CycleRun trigger,
-                         honest seed registry, llm/ client port with
-                         FakeLLMClient, the deterministic extraction
-                         validator, and ExtractionService persisting Event
-                         + LLMRun.
-Overall Status:          Sprint 002 in progress - Waves 1-2 and T008 merged
-                         (PRs #16-#23). Next: S002-T009 (cycle extract stage).
+Implementation Status:   Sprint 001 complete. Sprint 002 Waves 1-3 landed
+                         (S002-T002..T009): unit of work, env-isolated unit
+                         tests, terminal CycleRun trigger, honest seed
+                         registry, llm/ client port with FakeLLMClient,
+                         the deterministic extraction validator,
+                         ExtractionService persisting Event + LLMRun, and
+                         the cycle extract stage over COLLECTED Documents.
+Overall Status:          Sprint 002 in progress - Waves 1-3 merged
+                         (PRs #16-#25). Next: S002-T010 (monthly budget guard).
 Active Sprint:           002 - The first LLM slice (Status: Approved)
 Last Completed Sprint:   001 - Foundation to first real document
                          (closed 2026-08-19, 14/14 tasks, PRs #1-#14)
-Next Planned Capability: S002-T009 - cycle extract stage: work queue,
-                         per-cycle cap, per-document isolation, status advance
+Next Planned Capability: S002-T010 - monthly budget guard enforcing the
+                         ADR-0015 ceiling from recorded token usage
 ```
 
 ## 3. Current Objective
@@ -163,13 +163,24 @@ machinery is the real unknown.
   and writes inside one unit of work: `LLMRun` always (ADR-0007), Event
   rows only on `accepted` (PR #23). `proposed`/`rejected` persist the run
   and zero events. A well-formed empty `events` array is `accepted` with
-  no Event rows. Failure between the two writes leaves neither. The cycle
-  extract stage stays passthrough until T009.
+  no Event rows. Failure between the two writes leaves neither.
+- S002-T009: cycle extract stage (`cycle/extract.py`) wired in place of the
+  passthrough (PR #25). Work queue is `COLLECTED` Documents, oldest
+  `collected_at` first, bounded by `CYCLE_EXTRACT_DOCUMENT_CAP` (default 20).
+  A terminal verdict (`accepted` / `proposed` / `rejected`) advances the
+  Document to `EVENTS_EXTRACTED` — extraction attempted, not "an Event row
+  exists". Transport failure leaves the Document `COLLECTED` and is recorded
+  on `CycleRun` (keyed by document id). Empty queue: zero LLM calls.
+  Isolation matches ingest: catch around `extract()` before writes;
+  persistence after a successful `extract()` still fails the stage
+  (specified design). Default `run_once` still uses `FakeLLMClient` (empty
+  events) until T011. The monthly budget guard is T010 and is not in this
+  task.
 
 ## 5. Work in Progress
 
-- S002-T009 (cycle extract stage: work queue, per-cycle cap, per-document
-  isolation, status advance) is next; depends on T008.
+- S002-T010 (monthly budget guard enforcing the ADR-0015 ceiling from
+  recorded token usage) is next; depends on T009.
 
 ## 6. Blocked Work
 
@@ -231,7 +242,7 @@ embedding-model-source decision.
 | Sprint | Goal | Status | Progress |
 |---|---|---|---|
 | 001 | Foundation to first real document | CLOSED (2026-08-19) | 14 / 14 |
-| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 8 / 12 |
+| 002 | The first LLM slice: Document to Event, validated and audited | APPROVED (2026-08-19) | 9 / 12 |
 
 ## 12. Update Rules
 
