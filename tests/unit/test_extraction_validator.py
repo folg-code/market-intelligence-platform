@@ -18,6 +18,7 @@ from moj_projekt.extraction import (
     ExtractionValidationResult,
     ValidationConfig,
     ValidationErrorCode,
+    parse_extraction_output,
     validate_extraction,
 )
 from moj_projekt.extraction.market_language import ALLOWED_MARKET_PHRASES, FORBIDDEN_MARKET_PHRASES
@@ -116,6 +117,21 @@ def test_json_array_is_unparseable_not_a_schema_miss() -> None:
     )
 
 
+def test_parser_accepts_schema_invalid_object_without_judging() -> None:
+    raw = '{"events": "not-an-array"}'
+    parsed = parse_extraction_output(raw)
+
+    assert parsed.error is None
+    assert parsed.parsed == {"events": "not-an-array"}
+
+    result = _validate(raw)
+    _assert_only_rule(
+        result,
+        ValidationErrorCode.SCHEMA_V1_VIOLATION,
+        message_must_include="expected array",
+    )
+
+
 def test_schema_v1_violation_is_rejected() -> None:
     event = _event()
     del event["title"]
@@ -138,6 +154,33 @@ def test_confidence_outside_zero_one_is_a_schema_v1_violation() -> None:
     )
 
 
+def test_confidence_outside_zero_one_is_event_invariant_when_schema_allows_it() -> None:
+    """Event.confidence 0..1 must be isolatable from the schema min/max gate."""
+    schema = deepcopy(load_output_schema())
+    defs = schema["$defs"]
+    assert isinstance(defs, dict)
+    event_def = defs["extracted_event"]
+    assert isinstance(event_def, dict)
+    properties = event_def["properties"]
+    assert isinstance(properties, dict)
+    confidence_schema = properties["confidence"]
+    assert isinstance(confidence_schema, dict)
+    del confidence_schema["minimum"]
+    del confidence_schema["maximum"]
+    result = validate_extraction(
+        _raw([_event(confidence=1.5)]),
+        document=_document(),
+        config=_CONFIG,
+        schema=schema,
+    )
+
+    _assert_only_rule(
+        result,
+        ValidationErrorCode.EVENT_INVARIANT,
+        message_must_include="outside",
+    )
+
+
 def test_event_with_no_facts_or_claims_is_rejected_for_missing_document_reference() -> None:
     result = _validate(_raw([_event(extracted_facts=[], source_claims=[])]))
 
@@ -155,6 +198,16 @@ def test_occurred_at_outside_plausibility_window_is_rejected() -> None:
         result,
         ValidationErrorCode.OCCURRED_AT_IMPLAUSIBLE,
         message_must_include="outside the plausibility window",
+    )
+
+
+def test_timezone_naive_occurred_at_is_a_schema_v1_violation() -> None:
+    result = _validate(_raw([_event(occurred_at="2026-08-17T18:00:00")]))
+
+    _assert_only_rule(
+        result,
+        ValidationErrorCode.SCHEMA_V1_VIOLATION,
+        message_must_include="date-time",
     )
 
 

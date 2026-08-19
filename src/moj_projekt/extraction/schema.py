@@ -230,11 +230,16 @@ def _resolve(schema: Mapping[str, Any], defs: Mapping[str, Any]) -> Mapping[str,
 
 
 def _is_date_time(value: str) -> bool:
+    """JSON Schema ``date-time`` is RFC 3339: an offset is required.
+
+    A naive timestamp would make the occurred_at window depend on the host
+    timezone when later converted with ``astimezone``.
+    """
     try:
-        datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return False
-    return True
+    return parsed.tzinfo is not None
 
 
 def _schema_error(json_path: str, message: str) -> ValidationError:
