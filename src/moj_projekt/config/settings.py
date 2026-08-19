@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     postgres_user: str = "moj_projekt"
     postgres_password: str
 
+    # LLM provider key (ADR-0010, ADR-0013). Optional here so unit tests and
+    # the default cycle never need a real key; AnthropicClient rejects a
+    # missing/blank value with a clear error (D-S002-04 clause 13).
+    anthropic_api_key: str | None = None
+
     # The 5-minute processing cycle (ADR-0004: "The interval itself should
     # be configuration, so tuning does not require a code change") and its
     # APScheduler job settings (ADR-0011: max_instances=1, coalesce=True,

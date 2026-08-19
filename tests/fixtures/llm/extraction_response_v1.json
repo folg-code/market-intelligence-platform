@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "type": "rate_decision",
+      "title": "Federal Reserve holds the policy rate unchanged",
+      "occurred_at": "2026-08-17T18:00:00Z",
+      "confidence": 0.86,
+      "entities": ["Federal Reserve"],
+      "topics": ["monetary_policy"],
+      "candidate_mechanism": "An unchanged policy rate leaves short-term funding conditions as they are.",
+      "affected_entities_or_exposures": ["short-term interest rates", "USD funding"],
+      "candidate_interpretation": "Monitored sources frame this as a pause rather than a new easing cycle.",
+      "extracted_facts": [
+        {
+          "text": "The Federal Reserve left the policy rate unchanged.",
+          "epistemic_category": "observed_fact"
+        }
+      ],
+      "source_claims": [
+        {
+          "text": "Officials described inflation as remaining above target.",
+          "epistemic_category": "source_claim",
+          "attributed_to": "FOMC statement"
+        }
+      ]
+    }
+  ]
+}

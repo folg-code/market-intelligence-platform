@@ -41,6 +41,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"moj_projekt.llm.prompts" = ["*.md", "*.json"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

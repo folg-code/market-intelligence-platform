@@ -1,0 +1,8 @@
+{
+  "system_prompt_version": "v1",
+  "prompt_version": "v1",
+  "output_schema_version": "v1",
+  "system_prompt_file": "system_v1.md",
+  "prompt_file": "event_extraction_v1.md",
+  "output_schema_file": "event_extraction_schema_v1.json"
+}
